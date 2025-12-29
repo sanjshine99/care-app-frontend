@@ -1,10 +1,8 @@
 // frontend/src/pages/Schedule/CalendarView.jsx
-// ENHANCED - Date range picker + shows both care receiver and care giver names
+// REDESIGNED - Grid view with care givers as rows, dates as columns
 
-import { useState } from "react";
-import { Calendar, momentLocalizer } from "react-big-calendar";
+import { useState, useEffect } from "react";
 import moment from "moment";
-import "react-big-calendar/lib/css/react-big-calendar.css";
 import {
   X,
   User,
@@ -14,17 +12,15 @@ import {
   CheckCircle,
   Calendar as CalendarIcon,
   Filter,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
 
-const localizer = momentLocalizer(moment);
-
 function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [currentView, setCurrentView] = useState("week");
-  const [currentDate, setCurrentDate] = useState(new Date());
 
   // Date range filter
   const [startDate, setStartDate] = useState(
@@ -34,101 +30,53 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     moment().endOf("week").format("YYYY-MM-DD")
   );
 
-  // Transform appointments to calendar events
-  const events = appointments.map((apt) => {
-    const date = new Date(apt.date);
-    const [startHour, startMin] = apt.startTime.split(":").map(Number);
-    const [endHour, endMin] = apt.endTime.split(":").map(Number);
+  // Generate array of dates between start and end
+  const getDatesInRange = () => {
+    const dates = [];
+    const start = moment(startDate);
+    const end = moment(endDate);
 
-    const start = new Date(date);
-    start.setHours(startHour, startMin, 0);
-
-    const end = new Date(date);
-    end.setHours(endHour, endMin, 0);
-
-    // NEW: Show both care receiver and care giver names
-    const careReceiverName = apt.careReceiver?.name || "Unknown CR";
-    const careGiverName = apt.careGiver?.name || "No CG";
-
-    return {
-      id: apt._id,
-      // Format: "John Smith → Mary Johnson (Visit 1)"
-      title: `${careReceiverName} → ${careGiverName} (V${apt.visitNumber})`,
-      start,
-      end,
-      resource: apt,
-    };
-  });
-
-  // Event style based on status
-  const eventStyleGetter = (event) => {
-    const appointment = event.resource;
-    let backgroundColor = "#3b82f6"; // Default blue
-
-    switch (appointment.status) {
-      case "scheduled":
-        backgroundColor = "#3b82f6"; // Blue
-        break;
-      case "in_progress":
-        backgroundColor = "#f59e0b"; // Orange
-        break;
-      case "completed":
-        backgroundColor = "#10b981"; // Green
-        break;
-      case "cancelled":
-        backgroundColor = "#ef4444"; // Red
-        break;
-      case "missed":
-        backgroundColor = "#991b1b"; // Dark red
-        break;
-      case "needs_review":
-        backgroundColor = "#8b5cf6"; // Purple
-        break;
-      default:
-        backgroundColor = "#6b7280"; // Gray
+    while (start.isSameOrBefore(end)) {
+      dates.push(start.format("YYYY-MM-DD"));
+      start.add(1, "day");
     }
 
-    // Double-handed care
-    if (appointment.doubleHanded) {
-      backgroundColor = "#ec4899"; // Pink
-    }
-
-    return {
-      style: {
-        backgroundColor,
-        borderRadius: "5px",
-        opacity: 0.8,
-        color: "white",
-        border: "0px",
-        display: "block",
-      },
-    };
+    return dates;
   };
 
-  const handleSelectEvent = (event) => {
-    setSelectedEvent(event.resource);
-    setShowModal(true);
+  // Get unique care givers from appointments
+  const getCareGivers = () => {
+    const careGiverMap = new Map();
+
+    appointments.forEach((apt) => {
+      if (apt.careGiver && apt.careGiver._id) {
+        careGiverMap.set(apt.careGiver._id, {
+          id: apt.careGiver._id,
+          name: apt.careGiver.name,
+          email: apt.careGiver.email,
+          phone: apt.careGiver.phone,
+        });
+      }
+    });
+
+    return Array.from(careGiverMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
   };
 
-  const handleNavigate = (newDate) => {
-    setCurrentDate(newDate);
+  // Get appointments for specific care giver and date
+  const getAppointmentsForCell = (careGiverId, date) => {
+    return appointments
+      .filter(
+        (apt) =>
+          apt.careGiver &&
+          apt.careGiver._id === careGiverId &&
+          moment(apt.date).format("YYYY-MM-DD") === date
+      )
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
   };
 
-  const handleViewChange = (newView) => {
-    setCurrentView(newView);
-  };
-
-  const handleRangeChange = (range) => {
-    if (Array.isArray(range)) {
-      // Week or Day view
-      onRangeChange(range[0], range[range.length - 1]);
-    } else {
-      // Month view
-      onRangeChange(range.start, range.end);
-    }
-  };
-
-  // NEW: Handle date range filter
+  // Handle date range filter
   const handleApplyDateRange = () => {
     if (!startDate || !endDate) {
       toast.error("Please select both start and end dates");
@@ -140,11 +88,9 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
       return;
     }
 
-    // Update calendar to show selected range
     const start = moment(startDate).toDate();
-    const end = moment(endDate).endOf("day").toDate();
+    const end = moment(endDate).toDate();
 
-    setCurrentDate(start);
     onRangeChange(start, end);
 
     toast.success(
@@ -152,7 +98,7 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     );
   };
 
-  // NEW: Quick date range buttons
+  // Quick date range buttons
   const handleQuickRange = (range) => {
     let start, end;
 
@@ -161,40 +107,46 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
         start = moment().startOf("day");
         end = moment().endOf("day");
         break;
-
       case "tomorrow":
         start = moment().add(1, "day").startOf("day");
         end = moment().add(1, "day").endOf("day");
         break;
-
       case "this_week":
-        start = moment().startOf("week").startOf("day");
-        end = moment().endOf("week").endOf("day");
+        start = moment().startOf("week");
+        end = moment().endOf("week");
         break;
-
       case "next_week":
-        start = moment().add(1, "week").startOf("week").startOf("day");
-        end = moment().add(1, "week").endOf("week").endOf("day");
+        start = moment().add(1, "week").startOf("week");
+        end = moment().add(1, "week").endOf("week");
         break;
-
       case "this_month":
-        start = moment().startOf("month").startOf("day");
-        end = moment().endOf("month").endOf("day");
+        start = moment().startOf("month");
+        end = moment().endOf("month");
         break;
-
-      case "next_month":
-        start = moment().add(1, "month").startOf("month").startOf("day");
-        end = moment().add(1, "month").endOf("month").endOf("day");
-        break;
-
       default:
         return;
     }
 
     setStartDate(start.format("YYYY-MM-DD"));
     setEndDate(end.format("YYYY-MM-DD"));
-    setCurrentDate(start.toDate());
     onRangeChange(start.toDate(), end.toDate());
+  };
+
+  // Navigate weeks
+  const handlePreviousWeek = () => {
+    const newStart = moment(startDate).subtract(7, "days").format("YYYY-MM-DD");
+    const newEnd = moment(endDate).subtract(7, "days").format("YYYY-MM-DD");
+    setStartDate(newStart);
+    setEndDate(newEnd);
+    onRangeChange(moment(newStart).toDate(), moment(newEnd).toDate());
+  };
+
+  const handleNextWeek = () => {
+    const newStart = moment(startDate).add(7, "days").format("YYYY-MM-DD");
+    const newEnd = moment(endDate).add(7, "days").format("YYYY-MM-DD");
+    setStartDate(newStart);
+    setEndDate(newEnd);
+    onRangeChange(moment(newStart).toDate(), moment(newEnd).toDate());
   };
 
   const handleStatusUpdate = async (status) => {
@@ -226,13 +178,40 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     }
   };
 
+  const dates = getDatesInRange();
+  const careGivers = getCareGivers();
+
   return (
     <div className="space-y-4">
       {/* Date Range Filter */}
       <div className="card">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="h-5 w-5 text-gray-600" />
-          <h3 className="font-semibold text-lg">Filter by Date Range</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-5 w-5 text-gray-600" />
+            <h3 className="font-semibold text-lg">Filter by Date Range</h3>
+          </div>
+
+          {/* Week Navigation */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePreviousWeek}
+              className="p-2 hover:bg-gray-100 rounded"
+              title="Previous week"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <span className="text-sm font-medium px-3">
+              {moment(startDate).format("MMM D")} -{" "}
+              {moment(endDate).format("MMM D, YYYY")}
+            </span>
+            <button
+              onClick={handleNextWeek}
+              className="p-2 hover:bg-gray-100 rounded"
+              title="Next week"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Quick Range Buttons */}
@@ -266,12 +245,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
             className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
           >
             This Month
-          </button>
-          <button
-            onClick={() => handleQuickRange("next_month")}
-            className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-          >
-            Next Month
           </button>
         </div>
 
@@ -322,35 +295,125 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
         </div>
       </div>
 
-      {/* Calendar */}
-      <div className="card">
+      {/* Calendar Grid */}
+      <div className="card overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" />
           </div>
+        ) : careGivers.length === 0 ? (
+          <div className="text-center py-12">
+            <CalendarIcon className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+            <h3 className="text-xl font-semibold mb-2 text-gray-800">
+              No Appointments Found
+            </h3>
+            <p className="text-gray-600">
+              There are no scheduled appointments for the selected date range.
+            </p>
+          </div>
         ) : (
-          <div style={{ height: "700px" }}>
-            <Calendar
-              localizer={localizer}
-              events={events}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: "100%" }}
-              eventPropGetter={eventStyleGetter}
-              onSelectEvent={handleSelectEvent}
-              onNavigate={handleNavigate}
-              onView={handleViewChange}
-              onRangeChange={handleRangeChange}
-              view={currentView}
-              date={currentDate}
-              views={["month", "week", "day", "agenda"]}
-              min={new Date(0, 0, 0, 7, 0, 0)} // 7 AM
-              max={new Date(0, 0, 0, 22, 0, 0)} // 10 PM
-              step={15}
-              timeslots={4}
-              popup
-              showMultiDayTimes
-            />
+          <div className="min-w-[800px]">
+            <table className="w-full border-collapse">
+              {/* Header Row - Dates */}
+              <thead>
+                <tr>
+                  <th className="border border-gray-300 bg-gray-100 p-3 text-left font-semibold sticky left-0 z-10 min-w-[200px]">
+                    Care Giver
+                  </th>
+                  {dates.map((date) => (
+                    <th
+                      key={date}
+                      className="border border-gray-300 bg-gray-100 p-3 text-center font-semibold min-w-[150px]"
+                    >
+                      <div className="text-sm">
+                        {moment(date).format("ddd")}
+                      </div>
+                      <div className="text-lg font-bold">
+                        {moment(date).format("MMM D")}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              {/* Body - Care Givers and Appointments */}
+              <tbody>
+                {careGivers.map((careGiver) => (
+                  <tr key={careGiver.id} className="hover:bg-gray-50">
+                    {/* Care Giver Name Column */}
+                    <td className="border border-gray-300 p-3 bg-white sticky left-0 z-10">
+                      <div>
+                        <p className="font-semibold text-gray-800">
+                          {careGiver.name}
+                        </p>
+                      </div>
+                    </td>
+
+                    {/* Appointment Cells */}
+                    {dates.map((date) => {
+                      const cellAppointments = getAppointmentsForCell(
+                        careGiver.id,
+                        date
+                      );
+
+                      return (
+                        <td
+                          key={date}
+                          className={`border border-gray-300 p-2 align-top ${
+                            moment(date).isSame(moment(), "day")
+                              ? "bg-blue-50"
+                              : ""
+                          }`}
+                        >
+                          {cellAppointments.length > 0 ? (
+                            <div className="space-y-1">
+                              {cellAppointments.map((apt) => (
+                                <div
+                                  key={apt._id}
+                                  onClick={() => {
+                                    setSelectedEvent(apt);
+                                    setShowModal(true);
+                                  }}
+                                  className={`p-2 rounded cursor-pointer text-xs hover:shadow-md transition-shadow ${
+                                    apt.status === "scheduled"
+                                      ? "bg-blue-100 border-l-4 border-blue-500"
+                                      : apt.status === "in_progress"
+                                        ? "bg-orange-100 border-l-4 border-orange-500"
+                                        : apt.status === "completed"
+                                          ? "bg-green-100 border-l-4 border-green-500"
+                                          : apt.status === "cancelled"
+                                            ? "bg-red-100 border-l-4 border-red-500"
+                                            : apt.doubleHanded
+                                              ? "bg-pink-100 border-l-4 border-pink-500"
+                                              : "bg-gray-100 border-l-4 border-gray-500"
+                                  }`}
+                                >
+                                  <p className="font-semibold text-gray-800 mb-1">
+                                    {apt.careReceiver?.name || "Unknown"}
+                                  </p>
+                                  <p className="text-gray-600">
+                                    {apt.startTime} - {apt.endTime}
+                                  </p>
+                                  {apt.doubleHanded && (
+                                    <p className="text-pink-700 font-medium mt-1">
+                                      🤝 Double-handed
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-400 py-4">
+                              -
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -359,7 +422,7 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
           <p className="text-sm font-medium text-gray-700 mb-2">
             Status Legend:
           </p>
-          <div className="flex flex-wrap gap-3 text-sm">
+          <div className="flex flex-wrap gap-3 text-xs">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-blue-500"></div>
               <span>Scheduled</span>
@@ -379,6 +442,10 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-pink-500"></div>
               <span>Double-Handed</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-blue-100 border-2 border-blue-500"></div>
+              <span>Today</span>
             </div>
           </div>
         </div>

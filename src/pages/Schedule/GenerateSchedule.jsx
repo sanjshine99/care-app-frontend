@@ -1,52 +1,51 @@
 // frontend/src/pages/Schedule/GenerateSchedule.jsx
-// FIXED - Properly handles visit object in failed appointments display
+// Generate schedule ONLY for unscheduled appointments, 1 month max
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
-  Users,
   AlertCircle,
   CheckCircle,
   XCircle,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
+import moment from "moment";
 
 function GenerateSchedule() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+
+  // Default: Next month (1 month range)
+  const [startDate, setStartDate] = useState(
+    moment().add(1, "day").format("YYYY-MM-DD")
+  );
+  const [endDate, setEndDate] = useState(
+    moment().add(1, "month").format("YYYY-MM-DD")
+  );
+
   const [careReceivers, setCareReceivers] = useState([]);
-  const [selectedCareReceivers, setSelectedCareReceivers] = useState([]);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [selectedReceivers, setSelectedReceivers] = useState([]);
+  const [unscheduledSummary, setUnscheduledSummary] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState(null);
 
   useEffect(() => {
     loadCareReceivers();
-
-    // Set default dates (next 7 days)
-    const today = new Date();
-    const nextWeek = new Date(today);
-    nextWeek.setDate(nextWeek.getDate() + 7);
-
-    setStartDate(today.toISOString().split("T")[0]);
-    setEndDate(nextWeek.toISOString().split("T")[0]);
+    loadUnscheduledSummary();
   }, []);
 
+  // Load care receivers
   const loadCareReceivers = async () => {
     try {
       const response = await api.get("/carereceivers", {
-        params: { limit: 100, isActive: true },
+        params: { isActive: true },
       });
 
       if (response.data.success) {
-        const crs = response.data.data.careReceivers || [];
-        // Only show care receivers with daily visits
-        const withVisits = crs.filter(
-          (cr) => cr.dailyVisits && cr.dailyVisits.length > 0
-        );
-        setCareReceivers(withVisits);
+        setCareReceivers(response.data.data.careReceivers || []);
       }
     } catch (error) {
       console.error("Error loading care receivers:", error);
@@ -54,317 +53,443 @@ function GenerateSchedule() {
     }
   };
 
-  const handleSelectAll = () => {
-    if (selectedCareReceivers.length === careReceivers.length) {
-      setSelectedCareReceivers([]);
-    } else {
-      setSelectedCareReceivers(careReceivers.map((cr) => cr._id));
-    }
-  };
-
-  const handleToggleCareReceiver = (id) => {
-    if (selectedCareReceivers.includes(id)) {
-      setSelectedCareReceivers(
-        selectedCareReceivers.filter((crId) => crId !== id)
-      );
-    } else {
-      setSelectedCareReceivers([...selectedCareReceivers, id]);
-    }
-  };
-
-  const handleGenerate = async () => {
-    if (!startDate || !endDate) {
-      toast.error("Please select start and end dates");
-      return;
-    }
-
-    if (selectedCareReceivers.length === 0) {
-      toast.error("Please select at least one care receiver");
-      return;
-    }
-
+  // Load unscheduled summary
+  const loadUnscheduledSummary = async () => {
     try {
       setLoading(true);
-      setResults(null);
 
-      const response = await api.post("/schedule/generate", {
-        careReceiverIds: selectedCareReceivers,
-        startDate,
-        endDate,
+      const response = await api.get("/schedule/unscheduled", {
+        params: {
+          startDate: startDate,
+          endDate: endDate,
+        },
       });
 
       if (response.data.success) {
-        setResults(response.data.data);
-        toast.success(
-          response.data.message || "Schedule generated successfully"
+        const unscheduledData = response.data.data.unscheduled || [];
+        const totalUnscheduled = unscheduledData.reduce(
+          (sum, item) => sum + (item.missing || 0),
+          0
         );
+
+        setUnscheduledSummary({
+          total: totalUnscheduled,
+          byCareReceiver: unscheduledData,
+        });
       }
     } catch (error) {
-      console.error("Schedule generation error:", error);
-      const message =
-        error.response?.data?.error?.message || "Failed to generate schedule";
-      toast.error(message);
+      console.error("Error loading unscheduled:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateDays = () => {
-    if (!startDate || !endDate) return 0;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    return Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+  // Update date range (max 1 month)
+  const handleStartDateChange = (newStart) => {
+    const start = moment(newStart);
+    const maxEnd = start.clone().add(1, "month");
+
+    setStartDate(start.format("YYYY-MM-DD"));
+
+    // If current end date is beyond 1 month, adjust it
+    if (moment(endDate).isAfter(maxEnd)) {
+      setEndDate(maxEnd.format("YYYY-MM-DD"));
+      toast.info("End date adjusted to 1 month maximum");
+    }
   };
 
+  const handleEndDateChange = (newEnd) => {
+    const start = moment(startDate);
+    const end = moment(newEnd);
+    const maxEnd = start.clone().add(1, "month");
+
+    if (end.isAfter(maxEnd)) {
+      toast.error("Maximum date range is 1 month");
+      setEndDate(maxEnd.format("YYYY-MM-DD"));
+    } else if (end.isBefore(start)) {
+      toast.error("End date must be after start date");
+      setEndDate(start.format("YYYY-MM-DD"));
+    } else {
+      setEndDate(end.format("YYYY-MM-DD"));
+    }
+  };
+
+  // Reload unscheduled when dates change
+  useEffect(() => {
+    if (startDate && endDate) {
+      loadUnscheduledSummary();
+    }
+  }, [startDate, endDate]);
+
+  // Toggle care receiver selection
+  const toggleCareReceiver = (id) => {
+    setSelectedReceivers((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((rid) => rid !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  // Select all with unscheduled appointments
+  const selectAllWithUnscheduled = () => {
+    if (!unscheduledSummary) return;
+
+    const idsWithUnscheduled = unscheduledSummary.byCareReceiver
+      .filter((item) => item.missing > 0)
+      .map((item) => item.careReceiver.id);
+
+    setSelectedReceivers(idsWithUnscheduled);
+    toast.success(
+      `Selected ${idsWithUnscheduled.length} care receivers with unscheduled appointments`
+    );
+  };
+
+  // Generate schedule
+  const handleGenerate = async () => {
+    if (selectedReceivers.length === 0) {
+      toast.error("Please select at least one care receiver");
+      return;
+    }
+
+    // Confirm
+    const unscheduledCount =
+      unscheduledSummary?.byCareReceiver
+        .filter((item) => selectedReceivers.includes(item.careReceiver.id))
+        .reduce((sum, item) => sum + item.missing, 0) || 0;
+
+    if (
+      !window.confirm(
+        `Generate schedule for ${selectedReceivers.length} care receiver(s)?\n\n` +
+          `This will attempt to schedule ${unscheduledCount} unscheduled appointments ` +
+          `from ${moment(startDate).format("MMM D, YYYY")} to ${moment(endDate).format("MMM D, YYYY")}.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setGenerating(true);
+      setResults(null);
+
+      console.log("Generating schedule...");
+      console.log("Care receivers:", selectedReceivers);
+      console.log("Date range:", startDate, "to", endDate);
+
+      const response = await api.post("/schedule/generate", {
+        careReceiverIds: selectedReceivers,
+        startDate: startDate,
+        endDate: endDate,
+      });
+
+      if (response.data.success) {
+        const summary = response.data.data.summary;
+
+        setResults({
+          success: true,
+          scheduled: summary.totalScheduled || 0,
+          failed: summary.totalFailed || 0,
+          details: response.data.data.results || [],
+        });
+
+        toast.success(
+          `✅ Scheduled ${summary.totalScheduled} appointments!\n` +
+            (summary.totalFailed > 0
+              ? `⚠️ ${summary.totalFailed} could not be scheduled`
+              : ""),
+          { autoClose: 5000 }
+        );
+
+        // Reload unscheduled summary
+        setTimeout(() => {
+          loadUnscheduledSummary();
+        }, 1000);
+      }
+    } catch (error) {
+      console.error("Error generating schedule:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to generate schedule"
+      );
+
+      setResults({
+        success: false,
+        error: error.response?.data?.message || "Generation failed",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Calculate date range info
+  const daysBetween = moment(endDate).diff(moment(startDate), "days") + 1;
+  const isMaxRange = daysBetween >= 30;
+
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-6xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <button
           onClick={() => navigate("/schedule")}
-          className="text-primary-600 hover:text-primary-700 mb-4"
+          className="btn-secondary flex items-center gap-2 mb-4"
         >
-          ← Back to Calendar
+          <ArrowLeft className="h-4 w-4" />
+          Back to Schedule
         </button>
+
         <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
           <Calendar className="h-8 w-8 text-primary-600" />
           Generate Schedule
         </h1>
         <p className="text-gray-600 mt-2">
-          Automatically schedule care visits for selected care receivers
+          Automatically schedule unscheduled appointments for the selected
+          period
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Configuration */}
-        <div className="lg:col-span-2">
-          <div className="card mb-6">
-            <h2 className="text-xl font-bold mb-4">Date Range</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="input"
-                  min={new Date().toISOString().split("T")[0]}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="input"
-                  min={startDate}
-                />
-              </div>
-            </div>
-            {startDate && endDate && (
-              <p className="text-sm text-gray-600 mt-2">
-                Scheduling for {calculateDays()} days
-              </p>
-            )}
-          </div>
-
-          {/* Care Receivers Selection */}
-          <div className="card">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Select Care Receivers</h2>
-              <button
-                onClick={handleSelectAll}
-                className="text-sm text-primary-600 hover:text-primary-700"
-              >
-                {selectedCareReceivers.length === careReceivers.length
-                  ? "Deselect All"
-                  : "Select All"}
-              </button>
-            </div>
-
-            {careReceivers.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <AlertCircle className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                <p>No care receivers with daily visits found</p>
-                <button
-                  onClick={() => navigate("/carereceivers/new")}
-                  className="text-primary-600 hover:underline mt-2"
-                >
-                  Add a care receiver
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {careReceivers.map((cr) => (
-                  <label
-                    key={cr._id}
-                    className="flex items-start gap-3 p-3 border rounded hover:bg-gray-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedCareReceivers.includes(cr._id)}
-                      onChange={() => handleToggleCareReceiver(cr._id)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium">{cr.name}</p>
-                      <p className="text-sm text-gray-600">
-                        {cr.dailyVisits.length} daily visit
-                        {cr.dailyVisits.length !== 1 ? "s" : ""}
-                      </p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {cr.dailyVisits.map((visit) => (
-                          <span
-                            key={visit.visitNumber}
-                            className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded"
-                          >
-                            Visit {visit.visitNumber}: {visit.preferredTime} (
-                            {visit.duration}min)
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Summary & Actions */}
-        <div className="lg:col-span-1">
-          <div className="card sticky top-8">
-            <h2 className="text-xl font-bold mb-4">Summary</h2>
-
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Care Receivers:</span>
-                <span className="font-semibold">
-                  {selectedCareReceivers.length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Days:</span>
-                <span className="font-semibold">{calculateDays()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Visits:</span>
-                <span className="font-semibold">
-                  {selectedCareReceivers.length > 0
-                    ? careReceivers
-                        .filter((cr) => selectedCareReceivers.includes(cr._id))
-                        .reduce((sum, cr) => sum + cr.dailyVisits.length, 0) *
-                      calculateDays()
-                    : 0}
-                </span>
-              </div>
-            </div>
-
-            <button
-              onClick={handleGenerate}
-              disabled={loading || selectedCareReceivers.length === 0}
-              className="btn-primary w-full flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Calendar className="h-5 w-5" />
-                  Generate Schedule
-                </>
-              )}
-            </button>
-
-            {results && (
-              <div className="mt-6 pt-6 border-t">
-                <h3 className="font-semibold mb-3">Results</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle className="h-5 w-5" />
-                    <span>{results.summary.totalScheduled} scheduled</span>
-                  </div>
-                  {results.summary.totalFailed > 0 && (
-                    <div className="flex items-center gap-2 text-red-600">
-                      <XCircle className="h-5 w-5" />
-                      <span>{results.summary.totalFailed} failed</span>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => navigate("/schedule")}
-                  className="btn-secondary w-full mt-4"
-                >
-                  View Calendar
-                </button>
-              </div>
-            )}
+      {/* Info Box */}
+      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-6">
+        <div className="flex items-start">
+          <AlertCircle className="h-5 w-5 text-blue-500 mr-3 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-blue-800 mb-1">
+              How Schedule Generation Works
+            </h3>
+            <ul className="text-sm text-blue-700 space-y-1">
+              <li>
+                • Only schedules <strong>unscheduled appointments</strong>{" "}
+                (won't duplicate existing appointments)
+              </li>
+              <li>
+                • Maximum range: <strong>1 month</strong> at a time
+              </li>
+              <li>
+                • Automatically assigns care givers based on skills,
+                availability, distance, and preferences
+              </li>
+              <li>• You can manually adjust any assignment afterward</li>
+            </ul>
           </div>
         </div>
       </div>
 
-      {/* Detailed Results */}
-      {results && (
-        <div className="card mt-6">
-          <h2 className="text-xl font-bold mb-4">Detailed Results</h2>
+      {/* Date Range Selection */}
+      <div className="card mb-6">
+        <h2 className="text-xl font-semibold mb-4">
+          1. Select Date Range (Max: 1 Month)
+        </h2>
 
-          <div className="space-y-4">
-            {results.results.map((result, index) => {
-              const careReceiver = careReceivers.find(
-                (cr) => cr._id === result.careReceiverId
-              );
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              className="input-field"
+            />
+          </div>
 
-              return (
-                <div key={index} className="border rounded p-4">
-                  <h3 className="font-semibold mb-2">
-                    {careReceiver?.name || "Unknown"}
-                  </h3>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate}
+              max={moment(startDate).add(1, "month").format("YYYY-MM-DD")}
+              onChange={(e) => handleEndDateChange(e.target.value)}
+              className="input-field"
+            />
+          </div>
 
-                  <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
-                    <div className="flex items-center gap-2 text-green-600">
-                      <CheckCircle className="h-4 w-4" />
-                      <span>{result.scheduled?.length || 0} scheduled</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-red-600">
-                      <XCircle className="h-4 w-4" />
-                      <span>{result.failed?.length || 0} failed</span>
+          <div className="flex items-end">
+            <div className="text-sm">
+              <p className="text-gray-600">Date Range:</p>
+              <p className="font-semibold text-gray-800">
+                {daysBetween} day{daysBetween !== 1 ? "s" : ""}
+              </p>
+              {isMaxRange && (
+                <p className="text-amber-600 text-xs mt-1">
+                  ⚠️ Maximum range (1 month)
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Unscheduled Summary */}
+      {loading ? (
+        <div className="card text-center py-8">
+          <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+          <p className="text-gray-600">Loading unscheduled appointments...</p>
+        </div>
+      ) : unscheduledSummary && unscheduledSummary.total > 0 ? (
+        <div className="card mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">
+              2. Select Care Receivers ({unscheduledSummary.total} Unscheduled)
+            </h2>
+            <button
+              onClick={selectAllWithUnscheduled}
+              className="btn-secondary text-sm"
+            >
+              Select All with Unscheduled
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {unscheduledSummary.byCareReceiver.map((item) => (
+              <div
+                key={item.careReceiver.id}
+                className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                  selectedReceivers.includes(item.careReceiver.id)
+                    ? "border-primary-500 bg-primary-50"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+                onClick={() => toggleCareReceiver(item.careReceiver.id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedReceivers.includes(item.careReceiver.id)}
+                      onChange={() => {}}
+                      className="h-5 w-5"
+                    />
+                    <div>
+                      <p className="font-semibold text-gray-800">
+                        {item.careReceiver.name}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {item.careReceiver.address?.city || "No address"}
+                      </p>
                     </div>
                   </div>
 
-                  {result.failed && result.failed.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-sm font-medium text-red-600 mb-2">
-                        Failed Appointments:
-                      </p>
-                      <div className="space-y-1">
-                        {result.failed.slice(0, 5).map((failure, idx) => (
-                          <p key={idx} className="text-xs text-gray-600">
-                            {/* FIXED: Use failure.visit.visitNumber instead of failure.visit */}
-                            {failure.date} - Visit{" "}
-                            {failure.visit?.visitNumber || failure.visit}:{" "}
-                            {failure.reason}
-                          </p>
-                        ))}
-                        {result.failed.length > 5 && (
-                          <p className="text-xs text-gray-500 italic">
-                            ... and {result.failed.length - 5} more
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-amber-600">
+                      {item.missing}
+                    </p>
+                    <p className="text-xs text-gray-500">unscheduled</p>
+                  </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
+
+          {selectedReceivers.length > 0 && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded">
+              <p className="text-sm text-green-800">
+                <strong>{selectedReceivers.length}</strong> care receiver
+                {selectedReceivers.length !== 1 ? "s" : ""} selected •{" "}
+                <strong>
+                  {unscheduledSummary.byCareReceiver
+                    .filter((item) =>
+                      selectedReceivers.includes(item.careReceiver.id)
+                    )
+                    .reduce((sum, item) => sum + item.missing, 0)}
+                </strong>{" "}
+                appointments will be scheduled
+              </p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card text-center py-12">
+          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">
+            No Unscheduled Appointments
+          </h3>
+          <p className="text-gray-600">
+            All appointments for the selected date range are already scheduled!
+          </p>
+        </div>
+      )}
+
+      {/* Generate Button */}
+      {unscheduledSummary && unscheduledSummary.total > 0 && (
+        <div className="flex justify-end gap-4">
+          <button
+            onClick={() => navigate("/schedule")}
+            className="btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={generating || selectedReceivers.length === 0}
+            className="btn-primary flex items-center gap-2"
+          >
+            {generating ? (
+              <>
+                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Calendar className="h-5 w-5" />
+                Generate Schedule
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Results */}
+      {results && (
+        <div className="mt-8 card">
+          <h2 className="text-xl font-semibold mb-4">Generation Results</h2>
+
+          {results.success ? (
+            <>
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="p-4 bg-green-50 border border-green-200 rounded text-center">
+                  <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <p className="text-3xl font-bold text-green-600">
+                    {results.scheduled}
+                  </p>
+                  <p className="text-sm text-green-700">Scheduled</p>
+                </div>
+
+                {results.failed > 0 && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded text-center">
+                    <XCircle className="h-8 w-8 text-amber-600 mx-auto mb-2" />
+                    <p className="text-3xl font-bold text-amber-600">
+                      {results.failed}
+                    </p>
+                    <p className="text-sm text-amber-700">Could Not Schedule</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => navigate("/schedule")}
+                  className="btn-primary flex-1"
+                >
+                  View Schedule
+                </button>
+                <button
+                  onClick={() => {
+                    setResults(null);
+                    loadUnscheduledSummary();
+                  }}
+                  className="btn-secondary"
+                >
+                  Generate More
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="p-4 bg-red-50 border border-red-200 rounded">
+              <p className="text-red-700">{results.error}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
