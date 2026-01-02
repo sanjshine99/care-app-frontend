@@ -1,5 +1,5 @@
 // frontend/src/pages/Schedule/GenerateSchedule.jsx
-// Generate schedule ONLY for unscheduled appointments, 1 month max
+// FIXED - Only loads unscheduled appointments when user clicks button
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +9,7 @@ import {
   CheckCircle,
   XCircle,
   ArrowLeft,
+  Search,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
@@ -32,10 +33,20 @@ function GenerateSchedule() {
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState(null);
 
+  // ========================================
+  // NEW: Track if user has checked for unscheduled
+  // ========================================
+  const [hasChecked, setHasChecked] = useState(false);
+  // ========================================
+
+  // ========================================
+  // CHANGED: Only load care receivers on mount, NOT unscheduled
+  // ========================================
   useEffect(() => {
     loadCareReceivers();
-    loadUnscheduledSummary();
+    // REMOVED: loadUnscheduledSummary() - wait for user to click
   }, []);
+  // ========================================
 
   // Load care receivers
   const loadCareReceivers = async () => {
@@ -57,6 +68,7 @@ function GenerateSchedule() {
   const loadUnscheduledSummary = async () => {
     try {
       setLoading(true);
+      setHasChecked(true);
 
       const response = await api.get("/schedule/unscheduled", {
         params: {
@@ -76,9 +88,16 @@ function GenerateSchedule() {
           total: totalUnscheduled,
           byCareReceiver: unscheduledData,
         });
+
+        if (totalUnscheduled === 0) {
+          toast.info("✅ No unscheduled appointments found in this date range");
+        } else {
+          toast.success(`Found ${totalUnscheduled} unscheduled appointments`);
+        }
       }
     } catch (error) {
       console.error("Error loading unscheduled:", error);
+      toast.error("Failed to check unscheduled appointments");
     } finally {
       setLoading(false);
     }
@@ -90,6 +109,10 @@ function GenerateSchedule() {
     const maxEnd = start.clone().add(1, "month");
 
     setStartDate(start.format("YYYY-MM-DD"));
+
+    // Reset check status when dates change
+    setHasChecked(false);
+    setUnscheduledSummary(null);
 
     // If current end date is beyond 1 month, adjust it
     if (moment(endDate).isAfter(maxEnd)) {
@@ -103,6 +126,10 @@ function GenerateSchedule() {
     const end = moment(newEnd);
     const maxEnd = start.clone().add(1, "month");
 
+    // Reset check status when dates change
+    setHasChecked(false);
+    setUnscheduledSummary(null);
+
     if (end.isAfter(maxEnd)) {
       toast.error("Maximum date range is 1 month");
       setEndDate(maxEnd.format("YYYY-MM-DD"));
@@ -114,12 +141,10 @@ function GenerateSchedule() {
     }
   };
 
-  // Reload unscheduled when dates change
-  useEffect(() => {
-    if (startDate && endDate) {
-      loadUnscheduledSummary();
-    }
-  }, [startDate, endDate]);
+  // ========================================
+  // REMOVED: Auto-reload on date change
+  // User must click "Check Unscheduled" button
+  // ========================================
 
   // Toggle care receiver selection
   const toggleCareReceiver = (id) => {
@@ -237,38 +262,34 @@ function GenerateSchedule() {
           Back to Schedule
         </button>
 
-        <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-          <Calendar className="h-8 w-8 text-primary-600" />
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">
           Generate Schedule
         </h1>
-        <p className="text-gray-600 mt-2">
-          Automatically schedule unscheduled appointments for the selected
-          period
+        <p className="text-gray-600">
+          Automatically schedule unassigned appointments for care receivers
         </p>
-      </div>
 
-      {/* Info Box */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-6">
-        <div className="flex items-start">
-          <AlertCircle className="h-5 w-5 text-blue-500 mr-3 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="text-sm font-semibold text-blue-800 mb-1">
-              How Schedule Generation Works
-            </h3>
-            <ul className="text-sm text-blue-700 space-y-1">
-              <li>
-                • Only schedules <strong>unscheduled appointments</strong>{" "}
-                (won't duplicate existing appointments)
-              </li>
-              <li>
-                • Maximum range: <strong>1 month</strong> at a time
-              </li>
-              <li>
-                • Automatically assigns care givers based on skills,
-                availability, distance, and preferences
-              </li>
-              <li>• You can manually adjust any assignment afterward</li>
-            </ul>
+        {/* Info Box */}
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-semibold mb-2">How This Works:</p>
+              <ul className="space-y-1">
+                <li>
+                  • Only schedules <strong>unassigned appointments</strong>
+                  (won't duplicate existing appointments)
+                </li>
+                <li>
+                  • Maximum range: <strong>1 month</strong> at a time
+                </li>
+                <li>
+                  • Automatically assigns care givers based on skills,
+                  availability, distance, and preferences
+                </li>
+                <li>• You can manually adjust any assignment afterward</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -279,7 +300,7 @@ function GenerateSchedule() {
           1. Select Date Range (Max: 1 Month)
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Start Date
@@ -320,15 +341,59 @@ function GenerateSchedule() {
             </div>
           </div>
         </div>
+
+        {/* ========================================
+            NEW: Check Unscheduled Button
+            ======================================== */}
+        <div className="flex justify-end">
+          <button
+            onClick={loadUnscheduledSummary}
+            disabled={loading}
+            className="btn-primary flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                Checking...
+              </>
+            ) : (
+              <>
+                <Search className="h-5 w-5" />
+                Check Unscheduled Appointments
+              </>
+            )}
+          </button>
+        </div>
+        {/* ======================================== */}
       </div>
 
-      {/* Unscheduled Summary */}
-      {loading ? (
+      {/* ========================================
+          CHANGED: Show message when not checked yet
+          ======================================== */}
+      {!hasChecked && !loading ? (
+        <div className="card text-center py-12 bg-gray-50">
+          <Search className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">
+            Ready to Check
+          </h3>
+          <p className="text-gray-600 mb-4">
+            Click "Check Unscheduled Appointments" to see what needs to be
+            scheduled
+          </p>
+          <p className="text-sm text-gray-500">
+            Currently viewing: {moment(startDate).format("MMM D")} -{" "}
+            {moment(endDate).format("MMM D, YYYY")}
+          </p>
+        </div>
+      ) : loading ? (
         <div className="card text-center py-8">
           <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-3"></div>
-          <p className="text-gray-600">Loading unscheduled appointments...</p>
+          <p className="text-gray-600">
+            Checking for unscheduled appointments...
+          </p>
         </div>
       ) : unscheduledSummary && unscheduledSummary.total > 0 ? (
+        /* ======================================== */
         <div className="card mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">
@@ -399,7 +464,7 @@ function GenerateSchedule() {
             </div>
           )}
         </div>
-      ) : (
+      ) : hasChecked && unscheduledSummary ? (
         <div className="card text-center py-12">
           <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-800 mb-2">
@@ -408,8 +473,12 @@ function GenerateSchedule() {
           <p className="text-gray-600">
             All appointments for the selected date range are already scheduled!
           </p>
+          <p className="text-sm text-gray-500 mt-2">
+            {moment(startDate).format("MMM D")} -{" "}
+            {moment(endDate).format("MMM D, YYYY")}
+          </p>
         </div>
-      )}
+      ) : null}
 
       {/* Generate Button */}
       {unscheduledSummary && unscheduledSummary.total > 0 && (
@@ -477,11 +546,13 @@ function GenerateSchedule() {
                 <button
                   onClick={() => {
                     setResults(null);
-                    loadUnscheduledSummary();
+                    setHasChecked(false);
+                    setUnscheduledSummary(null);
+                    setSelectedReceivers([]);
                   }}
                   className="btn-secondary"
                 >
-                  Generate More
+                  Check Again
                 </button>
               </div>
             </>

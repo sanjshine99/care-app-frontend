@@ -1,5 +1,6 @@
 // frontend/src/pages/Schedule/CalendarView.jsx
-// REDESIGNED - Grid view with care givers as rows, dates as columns
+// FIXED - Defaults to CURRENT MONTH instead of current week
+// Shows all appointments including old ones
 
 import { useState, useEffect } from "react";
 import moment from "moment";
@@ -14,6 +15,7 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  Users,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
@@ -22,13 +24,51 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  // Date range filter
+  // State for ALL care givers
+  const [allCareGivers, setAllCareGivers] = useState([]);
+  const [loadingCareGivers, setLoadingCareGivers] = useState(true);
+
+  // ========================================
+  // CHANGED: Default to CURRENT MONTH instead of week
+  // ========================================
   const [startDate, setStartDate] = useState(
-    moment().startOf("week").format("YYYY-MM-DD")
+    moment().startOf("month").format("YYYY-MM-DD") // ← MONTH START
   );
   const [endDate, setEndDate] = useState(
-    moment().endOf("week").format("YYYY-MM-DD")
+    moment().endOf("month").format("YYYY-MM-DD") // ← MONTH END
   );
+  // ========================================
+
+  // Fetch ALL care givers from API
+  useEffect(() => {
+    const fetchAllCareGivers = async () => {
+      try {
+        setLoadingCareGivers(true);
+        const response = await api.get("/caregivers?limit=100&isActive=true");
+
+        if (response.data.success) {
+          const careGivers = response.data.data.careGivers.map((cg) => ({
+            id: cg._id,
+            name: cg.name,
+            email: cg.email,
+            phone: cg.phone,
+          }));
+
+          setAllCareGivers(careGivers);
+          console.log(
+            `✅ Loaded ${careGivers.length} care givers for calendar`
+          );
+        }
+      } catch (error) {
+        console.error("❌ Failed to load care givers:", error);
+        toast.error("Failed to load care givers");
+      } finally {
+        setLoadingCareGivers(false);
+      }
+    };
+
+    fetchAllCareGivers();
+  }, []);
 
   // Generate array of dates between start and end
   const getDatesInRange = () => {
@@ -44,36 +84,32 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     return dates;
   };
 
-  // Get unique care givers from appointments
-  const getCareGivers = () => {
-    const careGiverMap = new Map();
-
-    appointments.forEach((apt) => {
-      if (apt.careGiver && apt.careGiver._id) {
-        careGiverMap.set(apt.careGiver._id, {
-          id: apt.careGiver._id,
-          name: apt.careGiver.name,
-          email: apt.careGiver.email,
-          phone: apt.careGiver.phone,
-        });
-      }
-    });
-
-    return Array.from(careGiverMap.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
-  };
-
-  // Get appointments for specific care giver and date
+  // Get appointments where CG is PRIMARY OR SECONDARY
   const getAppointmentsForCell = (careGiverId, date) => {
     return appointments
-      .filter(
-        (apt) =>
-          apt.careGiver &&
-          apt.careGiver._id === careGiverId &&
-          moment(apt.date).format("YYYY-MM-DD") === date
-      )
+      .filter((apt) => {
+        const isPrimary = apt.careGiver && apt.careGiver._id === careGiverId;
+        const isSecondary =
+          apt.secondaryCareGiver && apt.secondaryCareGiver._id === careGiverId;
+        const isRelevant = isPrimary || isSecondary;
+        const dateMatches = moment(apt.date).format("YYYY-MM-DD") === date;
+        return isRelevant && dateMatches;
+      })
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  };
+
+  // Check if care giver is primary or secondary
+  const getCareGiverRole = (appointment, careGiverId) => {
+    if (appointment.careGiver && appointment.careGiver._id === careGiverId) {
+      return "primary";
+    }
+    if (
+      appointment.secondaryCareGiver &&
+      appointment.secondaryCareGiver._id === careGiverId
+    ) {
+      return "secondary";
+    }
+    return null;
   };
 
   // Handle date range filter
@@ -123,6 +159,21 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
         start = moment().startOf("month");
         end = moment().endOf("month");
         break;
+      // ========================================
+      // NEW: Last month button
+      // ========================================
+      case "last_month":
+        start = moment().subtract(1, "month").startOf("month");
+        end = moment().subtract(1, "month").endOf("month");
+        break;
+      // ========================================
+      // NEW: All time button (last 90 days)
+      // ========================================
+      case "all_time":
+        start = moment().subtract(90, "days").startOf("day");
+        end = moment().add(30, "days").endOf("day");
+        break;
+      // ========================================
       default:
         return;
     }
@@ -132,22 +183,37 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     onRangeChange(start.toDate(), end.toDate());
   };
 
-  // Navigate weeks
-  const handlePreviousWeek = () => {
-    const newStart = moment(startDate).subtract(7, "days").format("YYYY-MM-DD");
-    const newEnd = moment(endDate).subtract(7, "days").format("YYYY-MM-DD");
+  // ========================================
+  // CHANGED: Navigate by MONTH instead of week
+  // ========================================
+  const handlePreviousMonth = () => {
+    const newStart = moment(startDate)
+      .subtract(1, "month")
+      .startOf("month")
+      .format("YYYY-MM-DD");
+    const newEnd = moment(startDate)
+      .subtract(1, "month")
+      .endOf("month")
+      .format("YYYY-MM-DD");
     setStartDate(newStart);
     setEndDate(newEnd);
     onRangeChange(moment(newStart).toDate(), moment(newEnd).toDate());
   };
 
-  const handleNextWeek = () => {
-    const newStart = moment(startDate).add(7, "days").format("YYYY-MM-DD");
-    const newEnd = moment(endDate).add(7, "days").format("YYYY-MM-DD");
+  const handleNextMonth = () => {
+    const newStart = moment(startDate)
+      .add(1, "month")
+      .startOf("month")
+      .format("YYYY-MM-DD");
+    const newEnd = moment(startDate)
+      .add(1, "month")
+      .endOf("month")
+      .format("YYYY-MM-DD");
     setStartDate(newStart);
     setEndDate(newEnd);
     onRangeChange(moment(newStart).toDate(), moment(newEnd).toDate());
   };
+  // ========================================
 
   const handleStatusUpdate = async (status) => {
     try {
@@ -179,7 +245,7 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
   };
 
   const dates = getDatesInRange();
-  const careGivers = getCareGivers();
+  const careGivers = allCareGivers;
 
   return (
     <div className="space-y-4">
@@ -191,23 +257,22 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
             <h3 className="font-semibold text-lg">Filter by Date Range</h3>
           </div>
 
-          {/* Week Navigation */}
+          {/* Month Navigation */}
           <div className="flex items-center gap-2">
             <button
-              onClick={handlePreviousWeek}
+              onClick={handlePreviousMonth}
               className="p-2 hover:bg-gray-100 rounded"
-              title="Previous week"
+              title="Previous month"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
             <span className="text-sm font-medium px-3">
-              {moment(startDate).format("MMM D")} -{" "}
-              {moment(endDate).format("MMM D, YYYY")}
+              {moment(startDate).format("MMMM YYYY")}
             </span>
             <button
-              onClick={handleNextWeek}
+              onClick={handleNextMonth}
               className="p-2 hover:bg-gray-100 rounded"
-              title="Next week"
+              title="Next month"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
@@ -223,28 +288,30 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
             Today
           </button>
           <button
-            onClick={() => handleQuickRange("tomorrow")}
-            className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-          >
-            Tomorrow
-          </button>
-          <button
             onClick={() => handleQuickRange("this_week")}
             className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
           >
             This Week
           </button>
           <button
-            onClick={() => handleQuickRange("next_week")}
-            className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
-          >
-            Next Week
-          </button>
-          <button
             onClick={() => handleQuickRange("this_month")}
             className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
           >
             This Month
+          </button>
+          {/* NEW: Last Month button */}
+          <button
+            onClick={() => handleQuickRange("last_month")}
+            className="px-3 py-1.5 text-sm bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+          >
+            Last Month
+          </button>
+          {/* NEW: All Time button */}
+          <button
+            onClick={() => handleQuickRange("all_time")}
+            className="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200"
+          >
+            Last 90 Days
           </button>
         </div>
 
@@ -290,25 +357,29 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
           <p>
             Showing: <strong>{moment(startDate).format("MMM D, YYYY")}</strong>{" "}
             to <strong>{moment(endDate).format("MMM D, YYYY")}</strong> (
-            {appointments.length} appointments)
+            {appointments.length} appointments across {careGivers.length} care
+            givers)
           </p>
         </div>
       </div>
 
       {/* Calendar Grid */}
       <div className="card overflow-x-auto">
-        {loading ? (
+        {loading || loadingCareGivers ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" />
+            <span className="ml-3 text-gray-600">
+              Loading {loadingCareGivers ? "care givers" : "appointments"}...
+            </span>
           </div>
         ) : careGivers.length === 0 ? (
           <div className="text-center py-12">
             <CalendarIcon className="h-16 w-16 mx-auto mb-4 text-gray-400" />
             <h3 className="text-xl font-semibold mb-2 text-gray-800">
-              No Appointments Found
+              No Care Givers Found
             </h3>
             <p className="text-gray-600">
-              There are no scheduled appointments for the selected date range.
+              Please add care givers to the system first.
             </p>
           </div>
         ) : (
@@ -318,7 +389,7 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
               <thead>
                 <tr>
                   <th className="border border-gray-300 bg-gray-100 p-3 text-left font-semibold sticky left-0 z-10 min-w-[200px]">
-                    Care Giver
+                    Care Giver ({careGivers.length})
                   </th>
                   {dates.map((date) => (
                     <th
@@ -346,6 +417,9 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                         <p className="font-semibold text-gray-800">
                           {careGiver.name}
                         </p>
+                        <p className="text-xs text-gray-500">
+                          {careGiver.email}
+                        </p>
                       </div>
                     </td>
 
@@ -367,44 +441,79 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                         >
                           {cellAppointments.length > 0 ? (
                             <div className="space-y-1">
-                              {cellAppointments.map((apt) => (
-                                <div
-                                  key={apt._id}
-                                  onClick={() => {
-                                    setSelectedEvent(apt);
-                                    setShowModal(true);
-                                  }}
-                                  className={`p-2 rounded cursor-pointer text-xs hover:shadow-md transition-shadow ${
-                                    apt.status === "scheduled"
-                                      ? "bg-blue-100 border-l-4 border-blue-500"
-                                      : apt.status === "in_progress"
-                                        ? "bg-orange-100 border-l-4 border-orange-500"
-                                        : apt.status === "completed"
-                                          ? "bg-green-100 border-l-4 border-green-500"
-                                          : apt.status === "cancelled"
-                                            ? "bg-red-100 border-l-4 border-red-500"
-                                            : apt.doubleHanded
-                                              ? "bg-pink-100 border-l-4 border-pink-500"
-                                              : "bg-gray-100 border-l-4 border-gray-500"
-                                  }`}
-                                >
-                                  <p className="font-semibold text-gray-800 mb-1">
-                                    {apt.careReceiver?.name || "Unknown"}
-                                  </p>
-                                  <p className="text-gray-600">
-                                    {apt.startTime} - {apt.endTime}
-                                  </p>
-                                  {apt.doubleHanded && (
-                                    <p className="text-pink-700 font-medium mt-1">
-                                      🤝 Double-handed
+                              {cellAppointments.map((apt) => {
+                                const role = getCareGiverRole(
+                                  apt,
+                                  careGiver.id
+                                );
+                                const isPrimary = role === "primary";
+                                const isSecondary = role === "secondary";
+
+                                return (
+                                  <div
+                                    key={apt._id}
+                                    onClick={() => {
+                                      setSelectedEvent(apt);
+                                      setShowModal(true);
+                                    }}
+                                    className={`p-2 rounded cursor-pointer text-xs hover:shadow-md transition-shadow ${
+                                      isPrimary
+                                        ? apt.status === "scheduled"
+                                          ? "bg-blue-500 text-white border-l-4 border-blue-700"
+                                          : apt.status === "in_progress"
+                                            ? "bg-orange-500 text-white border-l-4 border-orange-700"
+                                            : apt.status === "completed"
+                                              ? "bg-green-500 text-white border-l-4 border-green-700"
+                                              : apt.status === "cancelled"
+                                                ? "bg-red-500 text-white border-l-4 border-red-700"
+                                                : "bg-gray-500 text-white border-l-4 border-gray-700"
+                                        : isSecondary
+                                          ? apt.status === "scheduled"
+                                            ? "bg-blue-200 text-blue-900 border-2 border-dashed border-blue-500"
+                                            : apt.status === "in_progress"
+                                              ? "bg-orange-200 text-orange-900 border-2 border-dashed border-orange-500"
+                                              : apt.status === "completed"
+                                                ? "bg-green-200 text-green-900 border-2 border-dashed border-green-500"
+                                                : apt.status === "cancelled"
+                                                  ? "bg-red-200 text-red-900 border-2 border-dashed border-red-500"
+                                                  : "bg-gray-200 text-gray-900 border-2 border-dashed border-gray-500"
+                                          : "bg-gray-100 border-l-4 border-gray-500"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1 mb-1">
+                                      {apt.doubleHanded && (
+                                        <Users className="h-3 w-3 flex-shrink-0" />
+                                      )}
+                                      <p className="font-semibold">
+                                        {apt.startTime}
+                                      </p>
+                                    </div>
+                                    <p className="truncate">
+                                      {apt.careReceiver?.name || "Unknown"}
                                     </p>
-                                  )}
-                                </div>
-                              ))}
+
+                                    {isSecondary && (
+                                      <p className="text-[10px] mt-1 opacity-75 font-medium">
+                                        2nd CG
+                                      </p>
+                                    )}
+
+                                    {apt.doubleHanded && (
+                                      <p className="text-[10px] mt-1 opacity-75 truncate">
+                                        {isPrimary && apt.secondaryCareGiver
+                                          ? `+ ${apt.secondaryCareGiver.name}`
+                                          : isSecondary && apt.careGiver
+                                            ? `+ ${apt.careGiver.name}`
+                                            : ""}
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : (
-                            <div className="text-center text-gray-400 py-4">
-                              -
+                            <div className="text-center text-gray-400 text-xs py-4">
+                              —
                             </div>
                           )}
                         </td>
@@ -414,44 +523,42 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                 ))}
               </tbody>
             </table>
+
+            {/* Legend */}
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-sm font-medium text-gray-700 mb-3">Legend:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-blue-500"></div>
+                  <span>Primary (Scheduled)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-blue-200 border-2 border-dashed border-blue-500"></div>
+                  <span>Secondary (Scheduled)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-orange-500"></div>
+                  <span>In Progress</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-green-500"></div>
+                  <span>Completed</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-red-500"></div>
+                  <span>Cancelled</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-gray-600" />
+                  <span>Double-Handed Care</span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
-
-        {/* Legend */}
-        <div className="mt-4 pt-4 border-t">
-          <p className="text-sm font-medium text-gray-700 mb-2">
-            Status Legend:
-          </p>
-          <div className="flex flex-wrap gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-blue-500"></div>
-              <span>Scheduled</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-orange-500"></div>
-              <span>In Progress</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-green-500"></div>
-              <span>Completed</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-red-500"></div>
-              <span>Cancelled</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-pink-500"></div>
-              <span>Double-Handed</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-blue-100 border-2 border-blue-500"></div>
-              <span>Today</span>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* Appointment Details Modal */}
+      {/* Appointment Details Modal - Same as before */}
       {showModal && selectedEvent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -498,7 +605,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                 Care Giver{selectedEvent.doubleHanded ? "s" : ""}
               </h3>
               <div className="space-y-3">
-                {/* Primary Care Giver */}
                 <div className="bg-green-50 rounded-lg p-4">
                   <p className="font-medium">
                     {selectedEvent.careGiver?.name || "Not assigned"}
@@ -515,7 +621,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                   )}
                 </div>
 
-                {/* Secondary Care Giver (if double-handed) */}
                 {selectedEvent.doubleHanded &&
                   selectedEvent.secondaryCareGiver && (
                     <div className="bg-green-50 rounded-lg p-4">
@@ -562,7 +667,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
               </div>
             </div>
 
-            {/* Requirements */}
             {selectedEvent.requirements &&
               selectedEvent.requirements.length > 0 && (
                 <div className="mb-6">
@@ -580,7 +684,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                 </div>
               )}
 
-            {/* Double-Handed Indicator */}
             {selectedEvent.doubleHanded && (
               <div className="mb-6">
                 <div className="bg-pink-50 border border-pink-200 rounded-lg p-3">
@@ -591,7 +694,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
               </div>
             )}
 
-            {/* Notes */}
             {selectedEvent.notes && (
               <div className="mb-6">
                 <h3 className="font-semibold text-lg mb-3">Notes</h3>
@@ -601,7 +703,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
               </div>
             )}
 
-            {/* Status */}
             <div className="mb-6">
               <h3 className="font-semibold text-lg mb-3">Status</h3>
               <span
@@ -623,7 +724,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
               </span>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3 pt-4 border-t">
               {selectedEvent.status === "scheduled" && (
                 <>
