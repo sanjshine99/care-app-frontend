@@ -1,5 +1,5 @@
 // frontend/src/pages/Schedule/Schedule.jsx
-// COMPLETE - With validation system and all required functions
+// FIXED - Timezone bug resolved in date formatting
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,6 +15,30 @@ import CalendarView from "./CalendarView";
 import UnscheduledList from "./UnscheduledList";
 import NeedsReassignment from "./NeedsReassignment";
 import api from "../../services/api";
+
+// ========================================
+// ✅ FIXED: Date formatting helper to prevent timezone offset bug
+// ========================================
+/**
+ * Format date for API calls - prevents timezone offset issues
+ *
+ * PROBLEM: Using toISOString() converts to UTC, which can shift the date by one day
+ * Example: Jan 1, 2026 00:00 in GMT+8 → "2025-12-31T16:00:00Z" → "2025-12-31" ❌
+ *
+ * SOLUTION: Use local date components without timezone conversion
+ * Example: Jan 1, 2026 00:00 in GMT+8 → "2026-01-01" ✅
+ */
+const formatDateForAPI = (date) => {
+  if (!date) return "";
+
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+// ========================================
 
 function Schedule() {
   const navigate = useNavigate();
@@ -56,8 +80,8 @@ function Schedule() {
     try {
       const response = await api.get("/schedule/appointments", {
         params: {
-          startDate: dateRange.start.toISOString().split("T")[0],
-          endDate: dateRange.end.toISOString().split("T")[0],
+          startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
+          endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
           limit: 1000,
         },
       });
@@ -87,8 +111,8 @@ function Schedule() {
     try {
       const response = await api.get("/schedule/unscheduled", {
         params: {
-          startDate: dateRange.start.toISOString().split("T")[0],
-          endDate: dateRange.end.toISOString().split("T")[0],
+          startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
+          endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
         },
       });
 
@@ -117,8 +141,8 @@ function Schedule() {
     try {
       const response = await api.get("/schedule/appointments", {
         params: {
-          startDate: dateRange.start.toISOString().split("T")[0],
-          endDate: dateRange.end.toISOString().split("T")[0],
+          startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
+          endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
           status: "needs_reassignment",
           limit: 1000,
         },
@@ -153,8 +177,8 @@ function Schedule() {
       console.log("🔍 Validating schedule for conflicts...");
 
       const response = await api.post("/schedule/validate", {
-        startDate: dateRange.start.toISOString().split("T")[0],
-        endDate: dateRange.end.toISOString().split("T")[0],
+        startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
+        endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
       });
 
       if (response.data.success) {
@@ -224,87 +248,91 @@ function Schedule() {
   };
 
   const handleTabChange = (tab) => {
-    console.log(`📑 Switching to ${tab} tab`);
     setActiveTab(tab);
   };
 
   // Calculate stats
-  const scheduledCount = Array.isArray(appointments)
-    ? appointments.filter((a) => a.status === "scheduled").length
-    : 0;
-
-  const completedCount = Array.isArray(appointments)
-    ? appointments.filter((a) => a.status === "completed").length
-    : 0;
-
-  const inProgressCount = Array.isArray(appointments)
-    ? appointments.filter((a) => a.status === "in_progress").length
-    : 0;
-
-  const unscheduledCount = Array.isArray(unscheduled)
-    ? unscheduled.reduce((sum, u) => sum + (u.missing || 0), 0)
-    : 0;
-
-  const needsReassignmentCount = Array.isArray(needsReassignment)
-    ? needsReassignment.length
-    : 0;
+  const totalCount = appointments.length;
+  const scheduledCount = appointments.filter(
+    (a) => a.status === "scheduled"
+  ).length;
+  const inProgressCount = appointments.filter(
+    (a) => a.status === "in_progress"
+  ).length;
+  const completedCount = appointments.filter(
+    (a) => a.status === "completed"
+  ).length;
+  const unscheduledCount = unscheduled.reduce(
+    (sum, item) => sum + (item.missing || 0),
+    0
+  );
+  const needsReassignmentCount = needsReassignment.length;
 
   return (
-    <div className="p-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-              <CalendarIcon className="h-8 w-8 text-primary-600" />
-              Schedule Management
-            </h1>
-            <p className="text-gray-600 mt-2">View and manage appointments</p>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+            <CalendarIcon className="h-8 w-8 text-primary-600" />
+            Schedule Management
+          </h1>
+          <p className="text-gray-600 mt-1">View and manage appointments</p>
+        </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={handleRefresh}
-              disabled={loading || unscheduledLoading || validating}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <RefreshCw
-                className={`h-5 w-5 ${loading || unscheduledLoading || validating ? "animate-spin" : ""}`}
-              />
-              {validating ? "Validating..." : "Refresh & Validate"}
-            </button>
+        <div className="flex items-center gap-3">
+          {/* Refresh & Validate Button */}
+          <button
+            onClick={handleRefresh}
+            disabled={validating}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <RefreshCw
+              className={`h-5 w-5 ${validating ? "animate-spin" : ""}`}
+            />
+            {validating ? "Validating..." : "Refresh & Validate"}
+          </button>
 
-            <button
-              onClick={handleGenerateSchedule}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus className="h-5 w-5" />
-              Generate Schedule
-            </button>
-          </div>
+          {/* Generate Schedule Button */}
+          <button
+            onClick={handleGenerateSchedule}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="h-5 w-5" />
+            Generate Schedule
+          </button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Total */}
         <div className="card">
-          <p className="text-sm text-gray-600">Total Appointments</p>
-          <p className="text-2xl font-bold text-gray-800">
-            {appointments.length}
-          </p>
+          <h3 className="text-sm font-medium text-gray-600 mb-1">
+            Total Appointments
+          </h3>
+          <p className="text-2xl font-bold text-gray-900">{totalCount}</p>
         </div>
+
+        {/* Scheduled */}
         <div className="card">
-          <p className="text-sm text-gray-600">Scheduled</p>
+          <h3 className="text-sm font-medium text-gray-600 mb-1">Scheduled</h3>
           <p className="text-2xl font-bold text-blue-600">{scheduledCount}</p>
         </div>
+
+        {/* In Progress */}
         <div className="card">
-          <p className="text-sm text-gray-600">In Progress</p>
+          <h3 className="text-sm font-medium text-gray-600 mb-1">
+            In Progress
+          </h3>
           <p className="text-2xl font-bold text-orange-600">
             {inProgressCount}
           </p>
         </div>
+
+        {/* Completed */}
         <div className="card">
-          <p className="text-sm text-gray-600">Completed</p>
+          <h3 className="text-sm font-medium text-gray-600 mb-1">Completed</h3>
           <p className="text-2xl font-bold text-green-600">{completedCount}</p>
         </div>
       </div>
