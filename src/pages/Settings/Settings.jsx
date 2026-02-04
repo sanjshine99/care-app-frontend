@@ -68,7 +68,7 @@ function Settings() {
 
       if (response.data.success) {
         toast.success(
-          "✅ Settings saved successfully! Changes will take effect immediately."
+          " Settings saved successfully! Changes will take effect immediately.",
         );
         setSettings(response.data.data.settings);
       }
@@ -85,7 +85,7 @@ function Settings() {
   const handleReset = async () => {
     if (
       !window.confirm(
-        "Are you sure you want to reset all settings to defaults?"
+        "Are you sure you want to reset all settings to defaults?",
       )
     ) {
       return;
@@ -236,7 +236,7 @@ function Settings() {
                 onChange={(e) =>
                   updateScheduling(
                     "travelTimeBufferMinutes",
-                    parseInt(e.target.value)
+                    parseInt(e.target.value),
                   )
                 }
                 className="input w-full"
@@ -259,7 +259,7 @@ function Settings() {
                 onChange={(e) =>
                   updateScheduling(
                     "maxAppointmentsPerDay",
-                    parseInt(e.target.value)
+                    parseInt(e.target.value),
                   )
                 }
                 className="input w-full"
@@ -283,7 +283,7 @@ function Settings() {
                 onChange={(e) =>
                   updateScheduling(
                     "defaultAppointmentDuration",
-                    parseInt(e.target.value)
+                    parseInt(e.target.value),
                   )
                 }
                 className="input w-full"
@@ -367,7 +367,7 @@ function Settings() {
                   Allow Double Booking
                 </span>
                 <p className="text-xs text-gray-500 text-orange-600">
-                  ⚠️ Allow overlapping appointments (not recommended)
+                  Allow overlapping appointments (not recommended)
                 </p>
               </div>
             </label>
@@ -415,7 +415,7 @@ function Settings() {
                 onChange={(e) =>
                   updateNotifications(
                     "scheduleGeneratedNotify",
-                    e.target.checked
+                    e.target.checked,
                   )
                 }
                 className="w-5 h-5 text-primary-600 rounded"
@@ -456,7 +456,7 @@ function Settings() {
                 onChange={(e) =>
                   updateNotifications(
                     "missedAppointmentNotify",
-                    e.target.checked
+                    e.target.checked,
                   )
                 }
                 className="w-5 h-5 text-primary-600 rounded"
@@ -483,7 +483,7 @@ function Settings() {
                 onChange={(e) =>
                   updateNotifications(
                     "notificationRetentionDays",
-                    parseInt(e.target.value)
+                    parseInt(e.target.value),
                   )
                 }
                 className="input w-48"
