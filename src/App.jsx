@@ -14,9 +14,9 @@ import Settings from "./pages/Settings/Settings";
 import Schedule from "./pages/Schedule/Schedule";
 import Map from "./pages/Map/Map";
 import CareGiverAvailability from "./pages/CareGivers/CareGiverAvailability";
+import CareGiverDetail from "./pages/CareGivers/CareGiverDetail";
 import CareReceiverForm from "./pages/CareReceivers/CareReceiverForm";
 import CareReceiverDetail from "./pages/CareReceivers/CareReceiverDetail";
-import CalendarView from "./pages/Schedule/CalendarView";
 import GenerateSchedule from "./pages/Schedule/GenerateSchedule";
 
 // Protected route wrapper
@@ -61,6 +61,7 @@ function App() {
             {/* Care Givers */}
             <Route path="caregivers" element={<CareGiversList />} />
             <Route path="caregivers/new" element={<CareGiverForm />} />
+            <Route path="caregivers/:id" element={<CareGiverDetail />} />
             <Route path="caregivers/:id/edit" element={<CareGiverForm />} />
             <Route
               path="caregivers/:id/availability"
@@ -68,17 +69,13 @@ function App() {
             />
             {/* Care Receivers */}
             <Route path="carereceivers" element={<CareReceiversList />} />
-            <Route path="/carereceivers/new" element={<CareReceiverForm />} />
-            <Route path="/carereceivers/:id" element={<CareReceiverDetail />} />
-            <Route
-              path="/carereceivers/:id/edit"
-              element={<CareReceiverForm />}
-            />
+            <Route path="carereceivers/new" element={<CareReceiverForm />} />
+            <Route path="carereceivers/:id" element={<CareReceiverDetail />} />
+            <Route path="carereceivers/:id/edit" element={<CareReceiverForm />} />
 
             {/* Schedule */}
             <Route path="schedule" element={<Schedule />} />
-            <Route path="/schedule" element={<CalendarView />} />
-            <Route path="/schedule/generate" element={<GenerateSchedule />} />
+            <Route path="schedule/generate" element={<GenerateSchedule />} />
 
             {/* Map - ADD THIS ROUTE */}
             <Route path="map" element={<Map />} />
