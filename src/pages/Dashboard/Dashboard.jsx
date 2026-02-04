@@ -26,11 +26,28 @@ function Dashboard() {
 
   const loadStats = async () => {
     try {
+      // Get current month date range for appointment stats
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+      const formatDate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
+
       const [cgResponse, crResponse, scheduleStats] = await Promise.all([
         careGiverService.getAll({ limit: 1 }),
         careReceiverService.getAll({ limit: 1 }),
         api
-          .get("/schedule/stats")
+          .get("/schedule/stats", {
+            params: {
+              startDate: formatDate(startOfMonth),
+              endDate: formatDate(endOfMonth),
+            },
+          })
           .catch(() => ({ data: { data: { stats: {} } } })),
       ]);
 
@@ -65,7 +82,7 @@ function Dashboard() {
       path: "/carereceivers",
     },
     {
-      title: "Appointments",
+      title: "Appointments (This Month)",
       value: stats.appointments,
       icon: Calendar,
       color: "bg-purple-500",
@@ -165,7 +182,7 @@ function Dashboard() {
             </p>
           </div>
           <div>
-            <p className="text-gray-600 text-sm mb-1">Active Appointments</p>
+            <p className="text-gray-600 text-sm mb-1">This Month's Appointments</p>
             <p className="text-2xl font-bold">{stats.appointments}</p>
           </div>
           <div>
