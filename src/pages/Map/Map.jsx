@@ -45,7 +45,7 @@ function Map() {
   });
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [mapStyle, setMapStyle] = useState(
-    "mapbox://styles/mapbox/streets-v12"
+    "mapbox://styles/mapbox/streets-v12",
   );
 
   // Default center (London, UK)
@@ -174,7 +174,7 @@ function Map() {
         try {
           const el = createMarkerElement("caregiver");
 
-          const marker = new mapboxgl.Marker({ element: el })
+          const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
             .setLngLat([cg.coordinates.longitude, cg.coordinates.latitude])
             .setPopup(createPopup(cg))
             .addTo(map.current);
@@ -196,7 +196,7 @@ function Map() {
         try {
           const el = createMarkerElement("carereceiver");
 
-          const marker = new mapboxgl.Marker({ element: el })
+          const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
             .setLngLat([cr.coordinates.longitude, cr.coordinates.latitude])
             .setPopup(createPopup(cr))
             .addTo(map.current);
@@ -216,38 +216,52 @@ function Map() {
   };
 
   const createMarkerElement = (type) => {
+    // FIXED: Use wrapper element to prevent marker jumping on hover
+    // Outer container stays fixed, inner element does the scaling
+    const wrapper = document.createElement("div");
+    wrapper.className = "marker-wrapper";
+    wrapper.style.width = "40px";
+    wrapper.style.height = "40px";
+    wrapper.style.cursor = "pointer";
+    wrapper.style.position = "relative";
+
     const el = document.createElement("div");
     el.className = "custom-marker";
     el.style.width = "40px";
     el.style.height = "40px";
-    el.style.cursor = "pointer";
     el.style.borderRadius = "50%";
     el.style.display = "flex";
     el.style.alignItems = "center";
     el.style.justifyContent = "center";
     el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
     el.style.border = "3px solid white";
-    el.style.transition = "transform 0.2s";
+    el.style.transition = "transform 0.2s ease-in-out";
+    el.style.position = "absolute";
+    el.style.top = "50%";
+    el.style.left = "50%";
+    el.style.transform = "translate(-50%, -50%)";
 
     if (type === "caregiver") {
       el.style.backgroundColor = "#3B82F6"; // Blue
       el.innerHTML =
-        '<svg style="color: white; width: 20px; height: 20px;" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>';
+        '<svg style="color: white; width: 20px; height: 20px; pointer-events: none;" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>';
     } else {
       el.style.backgroundColor = "#10B981"; // Green
       el.innerHTML =
-        '<svg style="color: white; width: 20px; height: 20px;" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>';
+        '<svg style="color: white; width: 20px; height: 20px; pointer-events: none;" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>';
     }
 
-    el.addEventListener("mouseenter", () => {
-      el.style.transform = "scale(1.2)";
+    wrapper.appendChild(el);
+
+    wrapper.addEventListener("mouseenter", () => {
+      el.style.transform = "translate(-50%, -50%) scale(1.2)";
     });
 
-    el.addEventListener("mouseleave", () => {
-      el.style.transform = "scale(1)";
+    wrapper.addEventListener("mouseleave", () => {
+      el.style.transform = "translate(-50%, -50%) scale(1)";
     });
 
-    return el;
+    return wrapper;
   };
 
   const createPopup = (location) => {
@@ -276,7 +290,7 @@ function Map() {
             ${
               isCareGiver
                 ? `<p style="margin: 4px 0;">🎯 ${location.skills.length} skills</p>`
-                : `<p style="margin: 4px 0;">📅 ${location.dailyVisits} daily visits</p>`
+                : `<p style="margin: 4px 0;"> ${location.dailyVisits} daily visits</p>`
             }
           </div>
         </div>
@@ -440,7 +454,7 @@ function Map() {
               <button
                 onClick={() =>
                   handleStyleChange(
-                    "mapbox://styles/mapbox/satellite-streets-v12"
+                    "mapbox://styles/mapbox/satellite-streets-v12",
                   )
                 }
                 disabled={!mapReady}
@@ -514,7 +528,7 @@ function Map() {
                   )}
                   {selectedLocation.type === "carereceiver" && (
                     <p className="text-gray-600">
-                      📅 {selectedLocation.dailyVisits} daily visits
+                      {selectedLocation.dailyVisits} daily visits
                     </p>
                   )}
                 </div>
