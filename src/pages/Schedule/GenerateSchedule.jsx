@@ -20,10 +20,10 @@ function GenerateSchedule() {
 
   // Default: Next month (1 month range)
   const [startDate, setStartDate] = useState(
-    moment().add(1, "day").format("YYYY-MM-DD")
+    moment().add(1, "day").format("YYYY-MM-DD"),
   );
   const [endDate, setEndDate] = useState(
-    moment().add(1, "month").format("YYYY-MM-DD")
+    moment().add(1, "month").format("YYYY-MM-DD"),
   );
 
   const [careReceivers, setCareReceivers] = useState([]);
@@ -81,7 +81,7 @@ function GenerateSchedule() {
         const unscheduledData = response.data.data.unscheduled || [];
         const totalUnscheduled = unscheduledData.reduce(
           (sum, item) => sum + (item.missing || 0),
-          0
+          0,
         );
 
         setUnscheduledSummary({
@@ -90,7 +90,7 @@ function GenerateSchedule() {
         });
 
         if (totalUnscheduled === 0) {
-          toast.info("✅ No unscheduled appointments found in this date range");
+          toast.info(" No unscheduled appointments found in this date range");
         } else {
           toast.success(`Found ${totalUnscheduled} unscheduled appointments`);
         }
@@ -167,7 +167,7 @@ function GenerateSchedule() {
 
     setSelectedReceivers(idsWithUnscheduled);
     toast.success(
-      `Selected ${idsWithUnscheduled.length} care receivers with unscheduled appointments`
+      `Selected ${idsWithUnscheduled.length} care receivers with unscheduled appointments`,
     );
   };
 
@@ -188,7 +188,7 @@ function GenerateSchedule() {
       !window.confirm(
         `Generate schedule for ${selectedReceivers.length} care receiver(s)?\n\n` +
           `This will attempt to schedule ${unscheduledCount} unscheduled appointments ` +
-          `from ${moment(startDate).format("MMM D, YYYY")} to ${moment(endDate).format("MMM D, YYYY")}.`
+          `from ${moment(startDate).format("MMM D, YYYY")} to ${moment(endDate).format("MMM D, YYYY")}.`,
       )
     ) {
       return;
@@ -219,11 +219,11 @@ function GenerateSchedule() {
         });
 
         toast.success(
-          `✅ Scheduled ${summary.totalScheduled} appointments!\n` +
+          ` Scheduled ${summary.totalScheduled} appointments!\n` +
             (summary.totalFailed > 0
-              ? `⚠️ ${summary.totalFailed} could not be scheduled`
+              ? ` ${summary.totalFailed} could not be scheduled`
               : ""),
-          { autoClose: 5000 }
+          { autoClose: 5000 },
         );
 
         // Reload unscheduled summary
@@ -234,7 +234,7 @@ function GenerateSchedule() {
     } catch (error) {
       console.error("Error generating schedule:", error);
       toast.error(
-        error.response?.data?.message || "Failed to generate schedule"
+        error.response?.data?.message || "Failed to generate schedule",
       );
 
       setResults({
@@ -335,7 +335,7 @@ function GenerateSchedule() {
               </p>
               {isMaxRange && (
                 <p className="text-amber-600 text-xs mt-1">
-                  ⚠️ Maximum range (1 month)
+                  Maximum range (1 month)
                 </p>
               )}
             </div>
@@ -455,7 +455,7 @@ function GenerateSchedule() {
                 <strong>
                   {unscheduledSummary.byCareReceiver
                     .filter((item) =>
-                      selectedReceivers.includes(item.careReceiver.id)
+                      selectedReceivers.includes(item.careReceiver.id),
                     )
                     .reduce((sum, item) => sum + item.missing, 0)}
                 </strong>{" "}

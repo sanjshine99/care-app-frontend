@@ -58,7 +58,7 @@ function ManualScheduleModal({
       // STEP 1: Get FRESH care receiver data from database
       console.log("\n--- Fetching FRESH care receiver data ---");
       const crResponse = await api.get(
-        `/schedule/care-receiver/${careReceiver.id}/fresh`
+        `/schedule/care-receiver/${careReceiver.id}/fresh`,
       );
 
       if (crResponse.data.success) {
@@ -75,7 +75,7 @@ function ManualScheduleModal({
 
         // Update visit with fresh care receiver data
         const freshVisit = freshCareReceiver.dailyVisits?.find(
-          (v) => v.visitNumber === visit.visitNumber
+          (v) => v.visitNumber === visit.visitNumber,
         );
         if (freshVisit) {
           console.log("Found fresh visit data:", freshVisit);
@@ -122,13 +122,13 @@ function ManualScheduleModal({
               "• All care givers are busy at this time\n" +
               "• Care givers are on time off\n" +
               "• Care givers are not working on this day\n\n" +
-              "Try refreshing or check care giver availability."
+              "Try refreshing or check care giver availability.",
           );
         }
 
         if (showToast) {
           toast.success(
-            `✅ Refreshed! Found ${careGivers.length} available care givers`
+            ` Refreshed! Found ${careGivers.length} available care givers`,
           );
         }
       }
@@ -159,7 +159,7 @@ function ManualScheduleModal({
 
     if (visit.doubleHanded && !selectedSecondaryCareGiver) {
       toast.error(
-        "Please select a secondary care giver for double-handed care"
+        "Please select a secondary care giver for double-handed care",
       );
       return;
     }
@@ -188,7 +188,7 @@ function ManualScheduleModal({
         notes: visit.notes || "",
       });
 
-      toast.success("✅ Appointment scheduled successfully!");
+      toast.success(" Appointment scheduled successfully!");
       onSuccess();
     } catch (error) {
       console.error("Scheduling error:", error);
@@ -213,14 +213,14 @@ function ManualScheduleModal({
       reasons.push("No specific skills required");
     } else {
       const normalizedCGSkills = careGiver.skills.map((s) =>
-        s.toLowerCase().replace(/ /g, "_")
+        s.toLowerCase().replace(/ /g, "_"),
       );
       const normalizedRequirements = requirements.map((r) =>
-        r.toLowerCase().replace(/ /g, "_")
+        r.toLowerCase().replace(/ /g, "_"),
       );
 
       const matchingSkills = normalizedRequirements.filter((req) =>
-        normalizedCGSkills.includes(req)
+        normalizedCGSkills.includes(req),
       );
 
       const hasAllSkills =
@@ -232,7 +232,7 @@ function ManualScheduleModal({
       } else {
         score += (matchingSkills.length / normalizedRequirements.length) * 50;
         reasons.push(
-          `Has ${matchingSkills.length}/${normalizedRequirements.length} skills`
+          `Has ${matchingSkills.length}/${normalizedRequirements.length} skills`,
         );
       }
     }
@@ -245,11 +245,11 @@ function ManualScheduleModal({
       if (careGiver.gender === careReceiver.genderPreference) {
         score += 30;
         reasons.push(
-          `✓ Matches gender preference (${careReceiver.genderPreference})`
+          `✓ Matches gender preference (${careReceiver.genderPreference})`,
         );
       } else {
         reasons.push(
-          `✗ Gender: ${careGiver.gender} (prefers ${careReceiver.genderPreference})`
+          `✗ Gender: ${careGiver.gender} (prefers ${careReceiver.genderPreference})`,
         );
       }
     } else {
@@ -489,15 +489,15 @@ function ManualScheduleModal({
 
                 const requirements = visit.requirements || [];
                 const normalizedCGSkills = careGiver.skills.map((s) =>
-                  s.toLowerCase().replace(/ /g, "_")
+                  s.toLowerCase().replace(/ /g, "_"),
                 );
                 const normalizedRequirements = requirements.map((r) =>
-                  r.toLowerCase().replace(/ /g, "_")
+                  r.toLowerCase().replace(/ /g, "_"),
                 );
                 const hasAllSkills =
                   requirements.length === 0 ||
                   normalizedRequirements.every((req) =>
-                    normalizedCGSkills.includes(req)
+                    normalizedCGSkills.includes(req),
                   );
 
                 const matchesGender =
@@ -598,7 +598,7 @@ function ManualScheduleModal({
                                 .replace(/ /g, "_");
                               const isRequired =
                                 normalizedRequirements.includes(
-                                  normalizedSkill
+                                  normalizedSkill,
                                 );
                               return (
                                 <span

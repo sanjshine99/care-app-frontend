@@ -75,7 +75,7 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
   const handleManualScheduleSuccess = () => {
     setShowManualScheduleModal(false);
     setSelectedAppointment(null);
-    toast.success("✅ Appointment scheduled successfully!");
+    toast.success(" Appointment scheduled successfully!");
     if (onScheduleSuccess) onScheduleSuccess();
   };
 
@@ -121,7 +121,7 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
                         </p>
                         {detail.reason && (
                           <p className="text-amber-700 font-medium mt-2">
-                            ⚠️ {detail.reason}
+                            {detail.reason}
                           </p>
                         )}
                       </div>
@@ -313,12 +313,12 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
                           </p>
                         )}
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
-                  <p>⚠️ All care givers are unavailable</p>
+                  <p> All care givers are unavailable</p>
                 </div>
               )}
             </div>

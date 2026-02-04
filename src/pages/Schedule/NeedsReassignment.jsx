@@ -60,7 +60,7 @@ function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
           {
             status: "cancelled",
             cancellationReason: "Reassigned to different care giver",
-          }
+          },
         );
       } catch (error) {
         console.error("Error cancelling old appointment:", error);
@@ -69,7 +69,7 @@ function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
 
     setShowReassignModal(false);
     setSelectedAppointment(null);
-    toast.success("✅ Appointment reassigned successfully!");
+    toast.success(" Appointment reassigned successfully!");
 
     if (onReassignSuccess) onReassignSuccess();
   };

@@ -17,16 +17,16 @@ import NeedsReassignment from "./NeedsReassignment";
 import api from "../../services/api";
 
 // ========================================
-// ✅ FIXED: Date formatting helper to prevent timezone offset bug
+//  FIXED: Date formatting helper to prevent timezone offset bug
 // ========================================
 /**
  * Format date for API calls - prevents timezone offset issues
  *
  * PROBLEM: Using toISOString() converts to UTC, which can shift the date by one day
- * Example: Jan 1, 2026 00:00 in GMT+8 → "2025-12-31T16:00:00Z" → "2025-12-31" ❌
+ * Example: Jan 1, 2026 00:00 in GMT+8 → "2025-12-31T16:00:00Z" → "2025-12-31"
  *
  * SOLUTION: Use local date components without timezone conversion
- * Example: Jan 1, 2026 00:00 in GMT+8 → "2026-01-01" ✅
+ * Example: Jan 1, 2026 00:00 in GMT+8 → "2026-01-01"
  */
 const formatDateForAPI = (date) => {
   if (!date) return "";
@@ -49,9 +49,15 @@ function Schedule() {
   const [unscheduledLoading, setUnscheduledLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("calendar");
-  const [dateRange, setDateRange] = useState({
-    start: new Date(),
-    end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  // FIXED: Default to current month (not just today forward) to show past appointments
+  const [dateRange, setDateRange] = useState(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return {
+      start: startOfMonth,
+      end: endOfMonth,
+    };
   });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -59,7 +65,7 @@ function Schedule() {
   // LOAD APPOINTMENTS
   // ========================================
   useEffect(() => {
-    console.log("✅ Loading appointments");
+    console.log(" Loading appointments");
     loadAppointments();
   }, [dateRange, refreshTrigger]);
 
@@ -80,8 +86,8 @@ function Schedule() {
     try {
       const response = await api.get("/schedule/appointments", {
         params: {
-          startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
-          endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
+          startDate: formatDateForAPI(dateRange.start), //  FIXED
+          endDate: formatDateForAPI(dateRange.end), //  FIXED
           limit: 1000,
         },
       });
@@ -111,8 +117,8 @@ function Schedule() {
     try {
       const response = await api.get("/schedule/unscheduled", {
         params: {
-          startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
-          endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
+          startDate: formatDateForAPI(dateRange.start), //  FIXED
+          endDate: formatDateForAPI(dateRange.end), //  FIXED
         },
       });
 
@@ -141,8 +147,8 @@ function Schedule() {
     try {
       const response = await api.get("/schedule/appointments", {
         params: {
-          startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
-          endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
+          startDate: formatDateForAPI(dateRange.start), //  FIXED
+          endDate: formatDateForAPI(dateRange.end), //  FIXED
           status: "needs_reassignment",
           limit: 1000,
         },
@@ -174,11 +180,11 @@ function Schedule() {
     setValidating(true);
 
     try {
-      console.log("🔍 Validating schedule for conflicts...");
+      console.log(" Validating schedule for conflicts...");
 
       const response = await api.post("/schedule/validate", {
-        startDate: formatDateForAPI(dateRange.start), // ✅ FIXED
-        endDate: formatDateForAPI(dateRange.end), // ✅ FIXED
+        startDate: formatDateForAPI(dateRange.start), //  FIXED
+        endDate: formatDateForAPI(dateRange.end), //  FIXED
       });
 
       if (response.data.success) {
@@ -188,8 +194,8 @@ function Schedule() {
 
         if (summary.invalid > 0) {
           toast.warning(
-            `⚠️ Found ${summary.invalid} appointment${summary.invalid !== 1 ? "s" : ""} with conflicts`,
-            { autoClose: 5000 }
+            ` Found ${summary.invalid} appointment${summary.invalid !== 1 ? "s" : ""} with conflicts`,
+            { autoClose: 5000 },
           );
 
           // Refresh data
@@ -200,9 +206,7 @@ function Schedule() {
             setActiveTab("needs_reassignment");
           }
         } else {
-          toast.success(
-            "✅ All appointments are valid - no conflicts detected!"
-          );
+          toast.success(" All appointments are valid - no conflicts detected!");
         }
       }
     } catch (error) {
@@ -233,7 +237,7 @@ function Schedule() {
   };
 
   const handleRangeChange = (start, end) => {
-    console.log("📅 Date range changed");
+    console.log(" Date range changed");
     setDateRange({ start, end });
   };
 
@@ -242,7 +246,7 @@ function Schedule() {
   };
 
   const handleManualScheduleSuccess = () => {
-    console.log("✅ Manual schedule success");
+    console.log(" Manual schedule success");
     setRefreshTrigger((prev) => prev + 1);
     toast.success("Appointment scheduled! Refreshing...");
   };
@@ -254,17 +258,17 @@ function Schedule() {
   // Calculate stats
   const totalCount = appointments.length;
   const scheduledCount = appointments.filter(
-    (a) => a.status === "scheduled"
+    (a) => a.status === "scheduled",
   ).length;
   const inProgressCount = appointments.filter(
-    (a) => a.status === "in_progress"
+    (a) => a.status === "in_progress",
   ).length;
   const completedCount = appointments.filter(
-    (a) => a.status === "completed"
+    (a) => a.status === "completed",
   ).length;
   const unscheduledCount = unscheduled.reduce(
     (sum, item) => sum + (item.missing || 0),
-    0
+    0,
   );
   const needsReassignmentCount = needsReassignment.length;
 

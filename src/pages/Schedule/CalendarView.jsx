@@ -32,10 +32,10 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
   // CHANGED: Default to CURRENT MONTH instead of week
   // ========================================
   const [startDate, setStartDate] = useState(
-    moment().startOf("month").format("YYYY-MM-DD") // ← MONTH START
+    moment().startOf("month").format("YYYY-MM-DD"), // ← MONTH START
   );
   const [endDate, setEndDate] = useState(
-    moment().endOf("month").format("YYYY-MM-DD") // ← MONTH END
+    moment().endOf("month").format("YYYY-MM-DD"), // ← MONTH END
   );
   // ========================================
 
@@ -55,12 +55,10 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
           }));
 
           setAllCareGivers(careGivers);
-          console.log(
-            `✅ Loaded ${careGivers.length} care givers for calendar`
-          );
+          console.log(` Loaded ${careGivers.length} care givers for calendar`);
         }
       } catch (error) {
-        console.error("❌ Failed to load care givers:", error);
+        console.error(" Failed to load care givers:", error);
         toast.error("Failed to load care givers");
       } finally {
         setLoadingCareGivers(false);
@@ -130,7 +128,7 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     onRangeChange(start, end);
 
     toast.success(
-      `Showing appointments from ${moment(startDate).format("MMM D")} to ${moment(endDate).format("MMM D, YYYY")}`
+      `Showing appointments from ${moment(startDate).format("MMM D")} to ${moment(endDate).format("MMM D, YYYY")}`,
     );
   };
 
@@ -427,7 +425,7 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                     {dates.map((date) => {
                       const cellAppointments = getAppointmentsForCell(
                         careGiver.id,
-                        date
+                        date,
                       );
 
                       return (
@@ -444,7 +442,7 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
                               {cellAppointments.map((apt) => {
                                 const role = getCareGiverRole(
                                   apt,
-                                  careGiver.id
+                                  careGiver.id,
                                 );
                                 const isPrimary = role === "primary";
                                 const isSecondary = role === "secondary";
