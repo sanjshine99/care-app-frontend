@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Save, X, Plus, Trash2, Clock, Calendar } from "lucide-react";
+import { Save, X, Plus, Trash2, Clock, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 import { careReceiverService } from "../../services/careReceiverService";
 
 const SKILLS = [
@@ -52,6 +52,9 @@ function CareReceiverForm() {
   const isEdit = Boolean(id);
 
   const [loading, setLoading] = useState(false);
+  const [expandedVisits, setExpandedVisits] = useState({});
+  const [addressErrors, setAddressErrors] = useState({ street: "", city: "", postcode: "" });
+  const [postcodeStatus, setPostcodeStatus] = useState(null); // null | 'validating' | 'valid' | 'invalid'
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -110,31 +113,92 @@ function CareReceiverForm() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    // Auto-uppercase UK postcode as user types
+    const processedValue = name === "address.postcode" ? value.toUpperCase() : value;
     if (name.includes(".")) {
       const [parent, child] = name.split(".");
       setFormData((prev) => ({
         ...prev,
         [parent]: {
           ...prev[parent],
-          [child]: value,
+          [child]: processedValue,
         },
       }));
     } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
+      setFormData((prev) => ({ ...prev, [name]: processedValue }));
     }
   };
 
+  const validatePostcode = async (postcode) => {
+    if (!postcode) {
+      setAddressErrors((prev) => ({ ...prev, postcode: "Postcode is required" }));
+      setPostcodeStatus("invalid");
+      return;
+    }
+    const ukPostcodeRegex = /^[A-Z]{1,2}[0-9][0-9A-Z]?\s?[0-9][A-Z]{2}$/;
+    if (!ukPostcodeRegex.test(postcode)) {
+      setAddressErrors((prev) => ({ ...prev, postcode: "Invalid UK postcode format (e.g. SW1A 1AA)" }));
+      setPostcodeStatus("invalid");
+      return;
+    }
+    setPostcodeStatus("validating");
+    try {
+      const res = await fetch(
+        `https://api.postcodes.io/postcodes/${encodeURIComponent(postcode)}/validate`
+      );
+      const data = await res.json();
+      if (data.result === true) {
+        setAddressErrors((prev) => ({ ...prev, postcode: "" }));
+        setPostcodeStatus("valid");
+      } else {
+        setAddressErrors((prev) => ({ ...prev, postcode: "This postcode does not exist in the UK" }));
+        setPostcodeStatus("invalid");
+      }
+    } catch {
+      // API unavailable — fall back to format-only validation
+      setAddressErrors((prev) => ({ ...prev, postcode: "" }));
+      setPostcodeStatus("valid");
+    }
+  };
+
+  const handleAddressBlur = (e) => {
+    const { name, value } = e.target;
+    const field = name.split(".")[1];
+    if (field === "street") {
+      setAddressErrors((prev) => ({
+        ...prev,
+        street: value.trim() ? "" : "Street address is required",
+      }));
+    }
+    if (field === "city") {
+      setAddressErrors((prev) => ({
+        ...prev,
+        city: value.trim() ? "" : "City is required",
+      }));
+    }
+    if (field === "postcode") {
+      validatePostcode(value.trim());
+    }
+  };
+
+  const toggleVisitExpanded = (index) => {
+    setExpandedVisits((prev) => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
+
   const addDailyVisit = () => {
+    const newIndex = formData.dailyVisits.length;
     const newVisit = {
-      visitNumber: formData.dailyVisits.length + 1,
+      visitNumber: newIndex + 1,
       preferredTime: "09:00",
       duration: 60,
       requirements: [],
       doubleHanded: false,
       priority: 3,
       notes: "",
-      // NEW FIELDS:
-      daysOfWeek: DAYS_OF_WEEK, // Default to all days
+      daysOfWeek: DAYS_OF_WEEK,
       recurrencePattern: "weekly",
       recurrenceInterval: 1,
       recurrenceStartDate: null,
@@ -143,6 +207,8 @@ function CareReceiverForm() {
       ...prev,
       dailyVisits: [...prev.dailyVisits, newVisit],
     }));
+    // Collapse all other visits and expand only the new one
+    setExpandedVisits({ [newIndex]: true });
   };
 
   const removeDailyVisit = (index) => {
@@ -214,12 +280,13 @@ function CareReceiverForm() {
       return;
     }
 
-    if (
-      !formData.address.street ||
-      !formData.address.city ||
-      !formData.address.postcode
-    ) {
+    if (!formData.address.street || !formData.address.city || !formData.address.postcode) {
       toast.error("Please fill in complete address");
+      return;
+    }
+
+    if (postcodeStatus !== "valid") {
+      toast.error("Please enter a valid UK postcode and wait for verification");
       return;
     }
 
@@ -281,22 +348,28 @@ function CareReceiverForm() {
   }
 
   return (
-    <div className="p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">
-            {isEdit ? "Edit Care Receiver" : "New Care Receiver"}
-          </h1>
-          <button
-            onClick={() => navigate("/carereceivers")}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <X className="h-4 w-4" />
-            Cancel
-          </button>
+    <div className="h-full flex flex-col">
+      {/* Fixed Header */}
+      <div className="flex-shrink-0 p-6 pb-0">
+        <div className="max-w-5xl mx-auto flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/carereceivers")}
+              className="text-gray-500 hover:text-gray-800"
+              title="Back"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <h1 className="text-3xl font-bold text-gray-800">
+              {isEdit ? "Edit Care Receiver" : "New Care Receiver"}
+            </h1>
+          </div>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6">
+        <form id="care-receiver-form" onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-6 pb-6">
           {/* Basic Information */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
@@ -312,6 +385,8 @@ function CareReceiverForm() {
                   onChange={handleChange}
                   className="input"
                   required
+                  pattern="^[A-Za-z\s'\-]+$"
+                  title="Name must contain letters only"
                 />
               </div>
 
@@ -395,7 +470,7 @@ function CareReceiverForm() {
 
           {/* Address */}
           <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Address</h2>
+            <h2 className="text-xl font-semibold mb-4">Address <span className="text-sm font-normal text-blue-600">(UK addresses only)</span></h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -406,9 +481,13 @@ function CareReceiverForm() {
                   name="address.street"
                   value={formData.address.street}
                   onChange={handleChange}
-                  className="input"
+                  onBlur={handleAddressBlur}
+                  className={`input ${addressErrors.street ? "border-red-500 focus:ring-red-500" : ""}`}
                   required
                 />
+                {addressErrors.street && (
+                  <p className="text-xs text-red-500 mt-1">{addressErrors.street}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -421,23 +500,66 @@ function CareReceiverForm() {
                     name="address.city"
                     value={formData.address.city}
                     onChange={handleChange}
-                    className="input"
+                    onBlur={handleAddressBlur}
+                    className={`input ${addressErrors.city ? "border-red-500 focus:ring-red-500" : ""}`}
                     required
                   />
+                  {addressErrors.city && (
+                    <p className="text-xs text-red-500 mt-1">{addressErrors.city}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Postcode *
                   </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="address.postcode"
+                      value={formData.address.postcode}
+                      onChange={handleChange}
+                      onBlur={handleAddressBlur}
+                      placeholder="SW1A 1AA"
+                      className={`input pr-10 ${
+                        postcodeStatus === "invalid"
+                          ? "border-red-500 focus:ring-red-500"
+                          : postcodeStatus === "valid"
+                          ? "border-green-500 focus:ring-green-500"
+                          : ""
+                      }`}
+                      required
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {postcodeStatus === "validating" && (
+                        <div className="animate-spin h-4 w-4 border-2 border-primary-600 border-t-transparent rounded-full" />
+                      )}
+                      {postcodeStatus === "valid" && (
+                        <span className="text-green-500 font-bold text-sm">✓</span>
+                      )}
+                      {postcodeStatus === "invalid" && (
+                        <span className="text-red-500 font-bold text-sm">✗</span>
+                      )}
+                    </div>
+                  </div>
+                  {addressErrors.postcode ? (
+                    <p className="text-xs text-red-500 mt-1">{addressErrors.postcode}</p>
+                  ) : postcodeStatus === "valid" ? (
+                    <p className="text-xs text-green-600 mt-1">Valid UK postcode</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">UK postcode format (e.g. SW1A 1AA)</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Country
+                  </label>
                   <input
                     type="text"
-                    name="address.postcode"
-                    value={formData.address.postcode}
-                    onChange={handleChange}
-                    placeholder="SW1A 1AA"
-                    className="input"
-                    required
+                    value="United Kingdom"
+                    disabled
+                    className="input bg-gray-50 text-gray-500 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -473,20 +595,41 @@ function CareReceiverForm() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-6">
-                {formData.dailyVisits.map((visit, index) => (
+              <div className="space-y-3">
+                {formData.dailyVisits.map((visit, index) => {
+                  const isExpanded = expandedVisits[index] ?? false;
+                  return (
                   <div
                     key={index}
-                    className="border-2 border-gray-200 rounded-lg p-5 bg-gray-50"
+                    className="border-2 border-gray-200 rounded-lg bg-gray-50"
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="font-semibold text-lg flex items-center gap-2">
-                        <Clock className="h-5 w-5 text-primary-600" />
-                        Visit {visit.visitNumber}
-                      </h3>
+                    {/* Collapsible Header */}
+                    <div
+                      className="flex justify-between items-center p-4 cursor-pointer hover:bg-gray-100 rounded-t-lg"
+                      onClick={() => toggleVisitExpanded(index)}
+                    >
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-500" />
+                        )}
+                        <h3 className="font-semibold text-lg flex items-center gap-2">
+                          <Clock className="h-5 w-5 text-primary-600" />
+                          Visit {visit.visitNumber}
+                        </h3>
+                        {!isExpanded && (
+                          <span className="text-sm text-gray-500">
+                            {visit.preferredTime} • {visit.duration}min • {(visit.daysOfWeek || DAYS_OF_WEEK).length} days
+                          </span>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => removeDailyVisit(index)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeDailyVisit(index);
+                        }}
                         className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded"
                         title="Remove visit"
                       >
@@ -494,6 +637,9 @@ function CareReceiverForm() {
                       </button>
                     </div>
 
+                    {/* Collapsible Content */}
+                    {isExpanded && (
+                    <div className="p-5 pt-0">
                     {/* Time and Duration */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div>
@@ -774,8 +920,11 @@ function CareReceiverForm() {
                         placeholder="Any special instructions..."
                       />
                     </div>
+                    </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -862,35 +1011,39 @@ function CareReceiverForm() {
             />
           </div>
 
-          {/* Form Actions */}
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/carereceivers")}
-              className="btn-secondary"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn-primary flex items-center gap-2"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-5 w-5" />
-                  {isEdit ? "Update" : "Create"} Care Receiver
-                </>
-              )}
-            </button>
-          </div>
         </form>
+      </div>
+
+      {/* Fixed Footer */}
+      <div className="flex-shrink-0 border-t bg-white px-6 py-4">
+        <div className="max-w-5xl mx-auto flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => navigate("/carereceivers")}
+            className="btn-secondary"
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="care-receiver-form"
+            className="btn-primary flex items-center gap-2"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-5 w-5" />
+                {isEdit ? "Update" : "Create"} Care Receiver
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
