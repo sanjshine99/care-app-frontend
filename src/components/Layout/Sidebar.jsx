@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -10,9 +11,28 @@ import {
   LogOut,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import api from "../../services/api";
 
 function Sidebar() {
   const { logout, user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    loadUnreadCount();
+    const interval = setInterval(loadUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await api.get("/notifications/unread-count");
+      if (response.data.success) {
+        setUnreadCount(response.data.data.count);
+      }
+    } catch {
+      // silently fail
+    }
+  };
 
   const navItems = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -20,7 +40,7 @@ function Sidebar() {
     { to: "/carereceivers", icon: UserCheck, label: "Care Receivers" },
     { to: "/schedule", icon: Calendar, label: "Schedule" },
     { to: "/map", icon: MapPin, label: "Map View" },
-    { to: "/notifications", icon: Bell, label: "Notifications" },
+    { to: "/notifications", icon: Bell, label: "Notifications", showBadge: true },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
 
@@ -65,8 +85,20 @@ function Sidebar() {
               }`
             }
           >
-            <item.icon className="h-5 w-5" />
+            <div className="relative">
+              <item.icon className="h-5 w-5" />
+              {item.showBadge && unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </div>
             <span className="font-medium">{item.label}</span>
+            {item.showBadge && unreadCount > 0 && (
+              <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

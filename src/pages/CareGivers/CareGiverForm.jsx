@@ -22,6 +22,8 @@ function CareGiverForm() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [addressErrors, setAddressErrors] = useState({ street: '', city: '', postcode: '' });
+  const [postcodeStatus, setPostcodeStatus] = useState(null); // null | 'validating' | 'valid' | 'invalid'
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -80,14 +82,16 @@ function CareGiverForm() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
+
     if (name.startsWith('address.')) {
       const field = name.split('.')[1];
+      // Auto-uppercase UK postcode as user types
+      const processedValue = field === 'postcode' ? value.toUpperCase() : value;
       setFormData((prev) => ({
         ...prev,
         address: {
           ...prev.address,
-          [field]: value,
+          [field]: processedValue,
         },
       }));
     } else {
@@ -95,6 +99,58 @@ function CareGiverForm() {
         ...prev,
         [name]: type === 'checkbox' ? checked : value,
       }));
+    }
+  };
+
+  const validatePostcode = async (postcode) => {
+    if (!postcode) {
+      setAddressErrors((prev) => ({ ...prev, postcode: 'Postcode is required' }));
+      setPostcodeStatus('invalid');
+      return;
+    }
+    const ukPostcodeRegex = /^[A-Z]{1,2}[0-9][0-9A-Z]?\s?[0-9][A-Z]{2}$/;
+    if (!ukPostcodeRegex.test(postcode)) {
+      setAddressErrors((prev) => ({ ...prev, postcode: 'Invalid UK postcode format (e.g. SW1A 1AA)' }));
+      setPostcodeStatus('invalid');
+      return;
+    }
+    setPostcodeStatus('validating');
+    try {
+      const res = await fetch(
+        `https://api.postcodes.io/postcodes/${encodeURIComponent(postcode)}/validate`
+      );
+      const data = await res.json();
+      if (data.result === true) {
+        setAddressErrors((prev) => ({ ...prev, postcode: '' }));
+        setPostcodeStatus('valid');
+      } else {
+        setAddressErrors((prev) => ({ ...prev, postcode: 'This postcode does not exist in the UK' }));
+        setPostcodeStatus('invalid');
+      }
+    } catch {
+      // API unavailable — fall back to format-only validation
+      setAddressErrors((prev) => ({ ...prev, postcode: '' }));
+      setPostcodeStatus('valid');
+    }
+  };
+
+  const handleAddressBlur = (e) => {
+    const { name, value } = e.target;
+    const field = name.split('.')[1];
+    if (field === 'street') {
+      setAddressErrors((prev) => ({
+        ...prev,
+        street: value.trim() ? '' : 'Street address is required',
+      }));
+    }
+    if (field === 'city') {
+      setAddressErrors((prev) => ({
+        ...prev,
+        city: value.trim() ? '' : 'City is required',
+      }));
+    }
+    if (field === 'postcode') {
+      validatePostcode(value.trim());
     }
   };
 
@@ -113,6 +169,11 @@ function CareGiverForm() {
     // Validation
     if (formData.skills.length === 0) {
       toast.error('Please select at least one skill');
+      return;
+    }
+
+    if (postcodeStatus !== 'valid') {
+      toast.error('Please enter a valid UK postcode and wait for verification');
       return;
     }
 
@@ -180,6 +241,8 @@ function CareGiverForm() {
                 value={formData.name}
                 onChange={handleChange}
                 required
+                pattern="^[A-Za-z\s'\-]+$"
+                title="Name must contain letters only"
                 className="input"
                 placeholder="John Doe"
               />
@@ -254,8 +317,8 @@ function CareGiverForm() {
 
         {/* Address */}
         <div className="card mb-6">
-          <h2 className="text-xl font-bold mb-4">Address</h2>
-          
+          <h2 className="text-xl font-bold mb-4">Address <span className="text-sm font-normal text-blue-600">(UK addresses only)</span></h2>
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -266,10 +329,14 @@ function CareGiverForm() {
                 name="address.street"
                 value={formData.address.street}
                 onChange={handleChange}
+                onBlur={handleAddressBlur}
                 required
-                className="input"
+                className={`input ${addressErrors.street ? 'border-red-500 focus:ring-red-500' : ''}`}
                 placeholder="10 Downing Street"
               />
+              {addressErrors.street && (
+                <p className="text-xs text-red-500 mt-1">{addressErrors.street}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -282,27 +349,68 @@ function CareGiverForm() {
                   name="address.city"
                   value={formData.address.city}
                   onChange={handleChange}
+                  onBlur={handleAddressBlur}
                   required
-                  className="input"
+                  className={`input ${addressErrors.city ? 'border-red-500 focus:ring-red-500' : ''}`}
                   placeholder="London"
                 />
+                {addressErrors.city && (
+                  <p className="text-xs text-red-500 mt-1">{addressErrors.city}</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Postcode *
                 </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="address.postcode"
+                    value={formData.address.postcode}
+                    onChange={handleChange}
+                    onBlur={handleAddressBlur}
+                    required
+                    className={`input pr-10 ${
+                      postcodeStatus === 'invalid'
+                        ? 'border-red-500 focus:ring-red-500'
+                        : postcodeStatus === 'valid'
+                        ? 'border-green-500 focus:ring-green-500'
+                        : ''
+                    }`}
+                    placeholder="SW1A 1AA"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {postcodeStatus === 'validating' && (
+                      <div className="animate-spin h-4 w-4 border-2 border-primary-600 border-t-transparent rounded-full" />
+                    )}
+                    {postcodeStatus === 'valid' && (
+                      <span className="text-green-500 font-bold text-sm">✓</span>
+                    )}
+                    {postcodeStatus === 'invalid' && (
+                      <span className="text-red-500 font-bold text-sm">✗</span>
+                    )}
+                  </div>
+                </div>
+                {addressErrors.postcode ? (
+                  <p className="text-xs text-red-500 mt-1">{addressErrors.postcode}</p>
+                ) : postcodeStatus === 'valid' ? (
+                  <p className="text-xs text-green-600 mt-1">Valid UK postcode</p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-1">UK postcode format (e.g. SW1A 1AA)</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Country
+                </label>
                 <input
                   type="text"
-                  name="address.postcode"
-                  value={formData.address.postcode}
-                  onChange={handleChange}
-                  required
-                  pattern="^[A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}$"
-                  className="input"
-                  placeholder="SW1A 1AA"
+                  value="United Kingdom"
+                  disabled
+                  className="input bg-gray-50 text-gray-500 cursor-not-allowed"
                 />
-                <p className="text-xs text-gray-500 mt-1">UK postcode format</p>
               </div>
             </div>
           </div>
