@@ -1,17 +1,73 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react';
 import { careReceiverService } from '../../services/careReceiverService';
+import api from '../../services/api';
 import { toast } from 'react-toastify';
+
+const SCHEDULE_POLL_INTERVAL_MS = 4000;
+const SCHEDULE_POLL_DURATION_MS = 90000;
 
 function CareReceiversList() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [careReceivers, setCareReceivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
+  const schedulePollTimeoutRef = useRef(null);
 
   useEffect(() => { loadCareReceivers(1); }, [search]);
+
+  useEffect(() => {
+    const state = location.state;
+    const careReceiverId = state?.careReceiverId;
+    const queued = state?.scheduleGenerationQueued === true;
+    if (!queued || !careReceiverId) return;
+
+    const idStr = String(careReceiverId);
+    let elapsed = 0;
+
+    const poll = async () => {
+      if (elapsed >= SCHEDULE_POLL_DURATION_MS) return;
+      try {
+        const res = await api.get('/notifications', {
+          params: { limit: 20, sortBy: 'createdAt', sortOrder: 'desc' },
+        });
+        const list = res?.data?.data?.notifications ?? [];
+        const match = list.find(
+          (n) => String(n.metadata?.details?.careReceiverId) === idStr &&
+            (n.metadata?.action === 'schedule_generated' || n.metadata?.action === 'schedule_generation_failed')
+        );
+        if (match) {
+          if (match.metadata?.action === 'schedule_generation_failed') {
+            toast.error(
+              `Auto-scheduling failed: ${match.message || 'Please check notifications.'}`
+            );
+          } else {
+            const scheduled = match.metadata?.details?.scheduled ?? 0;
+            const failed = match.metadata?.details?.failed ?? 0;
+            toast.success(
+              `${scheduled} appointments assigned successfully, ${failed} could not be assigned.`
+            );
+          }
+          navigate('/carereceivers', { replace: true, state: {} });
+          return;
+        }
+      } catch (_) {
+        // ignore
+      }
+      elapsed += SCHEDULE_POLL_INTERVAL_MS;
+      schedulePollTimeoutRef.current = setTimeout(poll, SCHEDULE_POLL_INTERVAL_MS);
+    };
+
+    schedulePollTimeoutRef.current = setTimeout(poll, SCHEDULE_POLL_INTERVAL_MS);
+    return () => {
+      if (schedulePollTimeoutRef.current) {
+        clearTimeout(schedulePollTimeoutRef.current);
+      }
+    };
+  }, [location.state?.scheduleGenerationQueued, location.state?.careReceiverId, navigate]);
 
   const loadCareReceivers = async (page = pagination.page) => {
     try {
@@ -40,7 +96,7 @@ function CareReceiversList() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-6 flex flex-col">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Care Receivers</h1>
@@ -51,9 +107,17 @@ function CareReceiversList() {
         </button>
       </div>
       <div className="card mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-          <input type="text" placeholder="Search by name..." value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-10" />
+        <div className="flex items-center gap-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
+          <span className="flex items-center justify-center pl-3 text-gray-400" aria-hidden="true">
+            <Search className="h-5 w-5 shrink-0" />
+          </span>
+          <input
+            type="text"
+            placeholder="Search by name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="min-w-0 flex-1 py-2 pr-3 border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:outline-none"
+          />
         </div>
       </div>
       <div className="card overflow-hidden">

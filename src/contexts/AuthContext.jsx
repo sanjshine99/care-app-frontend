@@ -68,31 +68,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password) => {
-    try {
-      const response = await api.post('/auth/register', { 
-        name, 
-        email, 
-        password,
-        role: 'admin' 
-      });
-      
-      if (response.data.success) {
-        const { token, user } = response.data.data;
-        localStorage.setItem('token', token);
-        setUser(user);
-        setIsAuthenticated(true);
-        toast.success(`Welcome, ${user.name}!`);
-        navigate('/dashboard');
-        return { success: true };
-      }
-    } catch (error) {
-      const message = error.response?.data?.error?.message || 'Registration failed';
-      toast.error(message);
-      return { success: false, error: message };
-    }
-  };
-
   const logout = async () => {
     try {
       await api.post('/auth/logout');
@@ -112,7 +87,6 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAuthenticated,
     login,
-    register,
     logout,
     checkAuth,
   };

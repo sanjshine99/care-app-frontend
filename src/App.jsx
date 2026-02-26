@@ -18,6 +18,8 @@ import CareGiverDetail from "./pages/CareGivers/CareGiverDetail";
 import CareReceiverForm from "./pages/CareReceivers/CareReceiverForm";
 import CareReceiverDetail from "./pages/CareReceivers/CareReceiverDetail";
 import GenerateSchedule from "./pages/Schedule/GenerateSchedule";
+import UsersList from "./pages/Users/UsersList";
+import UserForm from "./pages/Users/UserForm";
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
@@ -82,6 +84,11 @@ function App() {
 
             {/* Notifications */}
             <Route path="notifications" element={<Notifications />} />
+
+            {/* Users */}
+            <Route path="users" element={<UsersList />} />
+            <Route path="users/new" element={<UserForm />} />
+            <Route path="users/:id/edit" element={<UserForm />} />
 
             {/* Settings */}
             <Route path="settings" element={<Settings />} />

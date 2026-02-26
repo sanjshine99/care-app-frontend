@@ -4,6 +4,16 @@
 
 /* Global styles */
 @layer base {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100%;
+  }
+
   body {
     @apply font-sans antialiased;
   }

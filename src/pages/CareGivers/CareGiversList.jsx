@@ -67,7 +67,7 @@ function CareGiversList() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-6 flex flex-col">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
@@ -85,14 +85,16 @@ function CareGiversList() {
 
       {/* Search Bar */}
       <div className="card mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+        <div className="flex items-center gap-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
+          <span className="flex items-center justify-center pl-3 text-gray-400" aria-hidden="true">
+            <Search className="h-5 w-5 shrink-0" />
+          </span>
           <input
             type="text"
             placeholder="Search by name or email..."
             value={search}
             onChange={handleSearchChange}
-            className="input pl-10"
+            className="min-w-0 flex-1 py-2 pr-3 border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:outline-none"
           />
         </div>
       </div>

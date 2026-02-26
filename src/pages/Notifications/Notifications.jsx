@@ -228,7 +228,7 @@ function Notifications() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-6 flex flex-col">
       {/* Header */}
       <div className="mb-8">
         <div className="flex justify-between items-start">

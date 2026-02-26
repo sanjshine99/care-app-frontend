@@ -32,6 +32,7 @@ function GenerateSchedule() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [results, setResults] = useState(null);
+  const [showFailureDetails, setShowFailureDetails] = useState(false);
 
   // ========================================
   // NEW: Track if user has checked for unscheduled
@@ -211,6 +212,7 @@ function GenerateSchedule() {
       if (response.data.success) {
         const summary = response.data.data.summary;
 
+        setShowFailureDetails(false);
         setResults({
           success: true,
           scheduled: summary.totalScheduled || 0,
@@ -251,12 +253,15 @@ function GenerateSchedule() {
   const isMaxRange = daysBetween >= 30;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-6 flex flex-col">
+      <div className="max-w-6xl mx-auto w-full">
       {/* Header */}
       <div className="mb-8">
         <button
+          type="button"
           onClick={() => navigate("/schedule")}
           className="btn-secondary flex items-center gap-2 mb-4"
+          aria-label="Back to Schedule"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Schedule
@@ -265,7 +270,7 @@ function GenerateSchedule() {
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
           Generate Schedule
         </h1>
-        <p className="text-gray-600">
+        <p className="text-gray-600 mt-2">
           Automatically schedule unassigned appointments for care receivers
         </p>
 
@@ -536,6 +541,51 @@ function GenerateSchedule() {
                 )}
               </div>
 
+              {results.failed > 0 && results.details?.length > 0 && (
+                <div className="mt-4 mb-4">
+                  <button
+                    onClick={() => setShowFailureDetails((prev) => !prev)}
+                    className="text-sm text-amber-700 underline hover:text-amber-900"
+                  >
+                    {showFailureDetails ? "Hide" : "Show"} failure details (
+                    {results.failed} could not be scheduled)
+                  </button>
+                  {showFailureDetails && (
+                    <div className="mt-3 space-y-3 max-h-64 overflow-y-auto">
+                      {results.details
+                        .filter((r) => r.failed?.length > 0)
+                        .map((r, i) => {
+                          const crName =
+                            careReceivers.find(
+                              (c) => c._id === r.careReceiverId,
+                            )?.name || r.careReceiverId;
+                          return (
+                            <div
+                              key={i}
+                              className="border border-amber-200 rounded p-3 bg-amber-50"
+                            >
+                              <p className="font-semibold text-sm text-amber-900 mb-1">
+                                {crName}
+                              </p>
+                              {r.failed.slice(0, 5).map((f, j) => (
+                                <p key={j} className="text-xs text-amber-800">
+                                  • {f.date} Visit {f.visit?.visitNumber}:{" "}
+                                  {f.reason}
+                                </p>
+                              ))}
+                              {r.failed.length > 5 && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                  ...and {r.failed.length - 5} more
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-4">
                 <button
                   onClick={() => navigate("/schedule")}
@@ -549,6 +599,7 @@ function GenerateSchedule() {
                     setHasChecked(false);
                     setUnscheduledSummary(null);
                     setSelectedReceivers([]);
+                    setShowFailureDetails(false);
                   }}
                   className="btn-secondary"
                 >
@@ -563,6 +614,7 @@ function GenerateSchedule() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

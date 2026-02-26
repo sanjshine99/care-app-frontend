@@ -12,32 +12,23 @@ import {
   Clock,
   CheckCircle,
   Calendar as CalendarIcon,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
   Users,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
 
-function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
+function CalendarView({
+  appointments,
+  startDate,
+  endDate,
+  onRefresh,
+  loading,
+}) {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  // State for ALL care givers
   const [allCareGivers, setAllCareGivers] = useState([]);
   const [loadingCareGivers, setLoadingCareGivers] = useState(true);
-
-  // ========================================
-  // CHANGED: Default to CURRENT MONTH instead of week
-  // ========================================
-  const [startDate, setStartDate] = useState(
-    moment().startOf("month").format("YYYY-MM-DD"), // ← MONTH START
-  );
-  const [endDate, setEndDate] = useState(
-    moment().endOf("month").format("YYYY-MM-DD"), // ← MONTH END
-  );
-  // ========================================
 
   // Fetch ALL care givers from API
   useEffect(() => {
@@ -68,8 +59,8 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     fetchAllCareGivers();
   }, []);
 
-  // Generate array of dates between start and end
   const getDatesInRange = () => {
+    if (!startDate || !endDate) return [];
     const dates = [];
     const start = moment(startDate);
     const end = moment(endDate);
@@ -110,109 +101,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
     return null;
   };
 
-  // Handle date range filter
-  const handleApplyDateRange = () => {
-    if (!startDate || !endDate) {
-      toast.error("Please select both start and end dates");
-      return;
-    }
-
-    if (moment(startDate).isAfter(moment(endDate))) {
-      toast.error("Start date must be before end date");
-      return;
-    }
-
-    const start = moment(startDate).toDate();
-    const end = moment(endDate).toDate();
-
-    onRangeChange(start, end);
-
-    toast.success(
-      `Showing appointments from ${moment(startDate).format("MMM D")} to ${moment(endDate).format("MMM D, YYYY")}`,
-    );
-  };
-
-  // Quick date range buttons
-  const handleQuickRange = (range) => {
-    let start, end;
-
-    switch (range) {
-      case "today":
-        start = moment().startOf("day");
-        end = moment().endOf("day");
-        break;
-      case "tomorrow":
-        start = moment().add(1, "day").startOf("day");
-        end = moment().add(1, "day").endOf("day");
-        break;
-      case "this_week":
-        start = moment().startOf("week");
-        end = moment().endOf("week");
-        break;
-      case "next_week":
-        start = moment().add(1, "week").startOf("week");
-        end = moment().add(1, "week").endOf("week");
-        break;
-      case "this_month":
-        start = moment().startOf("month");
-        end = moment().endOf("month");
-        break;
-      // ========================================
-      // NEW: Last month button
-      // ========================================
-      case "last_month":
-        start = moment().subtract(1, "month").startOf("month");
-        end = moment().subtract(1, "month").endOf("month");
-        break;
-      // ========================================
-      // NEW: All time button (last 90 days)
-      // ========================================
-      case "all_time":
-        start = moment().subtract(90, "days").startOf("day");
-        end = moment().add(30, "days").endOf("day");
-        break;
-      // ========================================
-      default:
-        return;
-    }
-
-    setStartDate(start.format("YYYY-MM-DD"));
-    setEndDate(end.format("YYYY-MM-DD"));
-    onRangeChange(start.toDate(), end.toDate());
-  };
-
-  // ========================================
-  // CHANGED: Navigate by MONTH instead of week
-  // ========================================
-  const handlePreviousMonth = () => {
-    const newStart = moment(startDate)
-      .subtract(1, "month")
-      .startOf("month")
-      .format("YYYY-MM-DD");
-    const newEnd = moment(startDate)
-      .subtract(1, "month")
-      .endOf("month")
-      .format("YYYY-MM-DD");
-    setStartDate(newStart);
-    setEndDate(newEnd);
-    onRangeChange(moment(newStart).toDate(), moment(newEnd).toDate());
-  };
-
-  const handleNextMonth = () => {
-    const newStart = moment(startDate)
-      .add(1, "month")
-      .startOf("month")
-      .format("YYYY-MM-DD");
-    const newEnd = moment(startDate)
-      .add(1, "month")
-      .endOf("month")
-      .format("YYYY-MM-DD");
-    setStartDate(newStart);
-    setEndDate(newEnd);
-    onRangeChange(moment(newStart).toDate(), moment(newEnd).toDate());
-  };
-  // ========================================
-
   const handleStatusUpdate = async (status) => {
     try {
       await api.patch(`/schedule/appointments/${selectedEvent._id}/status`, {
@@ -247,120 +135,6 @@ function CalendarView({ appointments, onRangeChange, onRefresh, loading }) {
 
   return (
     <div className="space-y-4">
-      {/* Date Range Filter */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-5 w-5 text-gray-600" />
-            <h3 className="font-semibold text-lg">Filter by Date Range</h3>
-          </div>
-
-          {/* Month Navigation */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePreviousMonth}
-              className="p-2 hover:bg-gray-100 rounded"
-              title="Previous month"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <span className="text-sm font-medium px-3">
-              {moment(startDate).format("MMMM YYYY")}
-            </span>
-            <button
-              onClick={handleNextMonth}
-              className="p-2 hover:bg-gray-100 rounded"
-              title="Next month"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Quick Range Buttons */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            onClick={() => handleQuickRange("today")}
-            className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-          >
-            Today
-          </button>
-          <button
-            onClick={() => handleQuickRange("this_week")}
-            className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
-          >
-            This Week
-          </button>
-          <button
-            onClick={() => handleQuickRange("this_month")}
-            className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
-          >
-            This Month
-          </button>
-          {/* NEW: Last Month button */}
-          <button
-            onClick={() => handleQuickRange("last_month")}
-            className="px-3 py-1.5 text-sm bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
-          >
-            Last Month
-          </button>
-          {/* NEW: All Time button */}
-          <button
-            onClick={() => handleQuickRange("all_time")}
-            className="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200"
-          >
-            Last 90 Days
-          </button>
-        </div>
-
-        {/* Custom Date Range */}
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Start Date
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="input w-full"
-            />
-          </div>
-
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              End Date
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              min={startDate}
-              className="input w-full"
-            />
-          </div>
-
-          <button
-            onClick={handleApplyDateRange}
-            disabled={!startDate || !endDate}
-            className="btn-primary flex items-center gap-2 whitespace-nowrap"
-          >
-            <CalendarIcon className="h-5 w-5" />
-            Apply Filter
-          </button>
-        </div>
-
-        {/* Current Range Display */}
-        <div className="mt-3 text-sm text-gray-600">
-          <p>
-            Showing: <strong>{moment(startDate).format("MMM D, YYYY")}</strong>{" "}
-            to <strong>{moment(endDate).format("MMM D, YYYY")}</strong> (
-            {appointments.length} appointments across {careGivers.length} care
-            givers)
-          </p>
-        </div>
-      </div>
-
       {/* Calendar Grid */}
       <div className="card overflow-x-auto">
         {loading || loadingCareGivers ? (
