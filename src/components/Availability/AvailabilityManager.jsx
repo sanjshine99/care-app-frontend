@@ -2,15 +2,33 @@ import { useState, useEffect } from "react";
 import { Save, Plus, Trash2, Clock, Calendar, AlertCircle } from "lucide-react";
 import { toast } from "react-toastify";
 
-const DAYS_OF_WEEK = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function getCurrentWeekDates() {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const mondayOffset = (dayOfWeek + 6) % 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - mondayOffset);
+  const todayStr = now.toISOString().split("T")[0];
+  return DAYS_OF_WEEK.map((dayName, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const dateStr = d.toISOString().split("T")[0];
+    const monthShort = d.toLocaleDateString("en-GB", { month: "short" });
+    const dayNum = d.getDate();
+    const fullDateLabel = `${dayName}, ${monthShort} ${dayNum}`;
+    const shortLabel = `${dayName.substring(0, 3)} ${dayNum} ${monthShort}`;
+    return {
+      dayName,
+      date: d,
+      dateStr,
+      fullDateLabel,
+      shortLabel,
+      isToday: dateStr === todayStr,
+    };
+  });
+}
 
 const PRESET_SCHEDULES = {
   standard: {
@@ -120,9 +138,7 @@ function AvailabilityManager({ careGiver, onSave }) {
   const updateSlot = (day, index, field, value) => {
     setAvailability((prev) => ({
       ...prev,
-      [day]: prev[day].map((slot, i) =>
-        i === index ? { ...slot, [field]: value } : slot
-      ),
+      [day]: prev[day].map((slot, i) => (i === index ? { ...slot, [field]: value } : slot)),
     }));
   };
 
@@ -165,9 +181,7 @@ function AvailabilityManager({ careGiver, onSave }) {
   };
 
   const updateTimeOff = (index, field, value) => {
-    setTimeOff((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
-    );
+    setTimeOff((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
   };
 
   const validateAvailability = () => {
@@ -182,10 +196,8 @@ function AvailabilityManager({ careGiver, onSave }) {
             const slot2 = slots[j];
 
             if (
-              (slot1.startTime >= slot2.startTime &&
-                slot1.startTime < slot2.endTime) ||
-              (slot2.startTime >= slot1.startTime &&
-                slot2.startTime < slot1.endTime)
+              (slot1.startTime >= slot2.startTime && slot1.startTime < slot2.endTime) ||
+              (slot2.startTime >= slot1.startTime && slot2.startTime < slot1.endTime)
             ) {
               errors.push(`${day}: Overlapping time slots detected`);
             }
@@ -196,9 +208,7 @@ function AvailabilityManager({ careGiver, onSave }) {
       // Check start < end
       slots.forEach((slot, index) => {
         if (slot.startTime >= slot.endTime) {
-          errors.push(
-            `${day} slot ${index + 1}: Start time must be before end time`
-          );
+          errors.push(`${day} slot ${index + 1}: Start time must be before end time`);
         }
       });
     });
@@ -253,18 +263,13 @@ function AvailabilityManager({ careGiver, onSave }) {
     return hours * 60 + minutes;
   };
 
+  const weekDates = getCurrentWeekDates();
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">
-            Availability Management
-          </h2>
-          <p className="text-gray-600 mt-1">
-            Set weekly schedule and time-off periods
-          </p>
-        </div>
+        <h2 className="text-xl font-semibold text-gray-800">Availability Management</h2>
         <button
           onClick={handleSave}
           disabled={saving}
@@ -273,43 +278,39 @@ function AvailabilityManager({ careGiver, onSave }) {
           {saving ? (
             <>
               <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-              <span>Saving...</span>
+              Saving...
             </>
           ) : (
             <>
               <Save className="h-5 w-5" />
-              <span>Save Availability</span>
+              Save Availability
             </>
           )}
         </button>
       </div>
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="card">
           <p className="text-sm text-gray-600">Total Weekly Hours</p>
-          <p className="text-3xl font-bold text-primary-600">
-            {getTotalHours()}
-          </p>
+          <p className="text-2xl font-bold text-primary-600">{getTotalHours()}</p>
         </div>
         <div className="card">
           <p className="text-sm text-gray-600">Working Days</p>
-          <p className="text-3xl font-bold text-green-600">
-            {
-              Object.values(availability).filter((slots) => slots.length > 0)
-                .length
-            }
+          <p className="text-2xl font-bold text-green-600">
+            {Object.values(availability).filter((slots) => slots.length > 0).length}
           </p>
         </div>
         <div className="card">
           <p className="text-sm text-gray-600">Time Off Periods</p>
-          <p className="text-3xl font-bold text-orange-600">{timeOff.length}</p>
+          <p className="text-2xl font-bold text-orange-600">{timeOff.length}</p>
         </div>
       </div>
 
       {/* Quick Presets */}
       <div className="card">
         <button
+          type="button"
           onClick={() => setShowPresets(!showPresets)}
           className="flex items-center gap-2 text-primary-600 hover:text-primary-800 font-medium"
         >
@@ -318,12 +319,13 @@ function AvailabilityManager({ careGiver, onSave }) {
         </button>
 
         {showPresets && (
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-2">
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2">
             {Object.entries(PRESET_SCHEDULES).map(([key, preset]) => (
               <button
                 key={key}
+                type="button"
                 onClick={() => applyPreset(key)}
-                className="px-4 py-2 bg-gray-100 hover:bg-primary-100 hover:text-primary-700 rounded transition-colors text-sm"
+                className="text-sm px-3 py-1.5 min-h-[36px] bg-gray-100 hover:bg-gray-200 rounded transition-colors"
               >
                 {preset.name}
               </button>
@@ -334,112 +336,123 @@ function AvailabilityManager({ careGiver, onSave }) {
 
       {/* Weekly Availability */}
       <div className="card">
-        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Calendar className="h-6 w-6 text-primary-600" />
+        <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-primary-600" />
           Weekly Availability
         </h3>
 
-        <div className="space-y-4">
-          {DAYS_OF_WEEK.map((day) => (
-            <div key={day} className="border rounded-lg p-4">
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="font-semibold text-lg">{day}</h4>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => addSlot(day)}
-                    className="text-sm px-3 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-1"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Slot
-                  </button>
-                  {availability[day]?.length > 0 && (
-                    <>
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            copyDay(day, e.target.value);
-                            e.target.value = "";
-                          }
-                        }}
-                        className="text-sm px-2 py-1 border rounded"
-                      >
-                        <option value="">Copy to...</option>
-                        {DAYS_OF_WEEK.filter((d) => d !== day).map((d) => (
-                          <option key={d} value={d}>
-                            {d}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => clearDay(day)}
-                        className="text-sm px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                      >
-                        Clear
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {availability[day]?.length > 0 ? (
-                <div className="space-y-2">
-                  {availability[day].map((slot, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <input
-                        type="time"
-                        value={slot.startTime}
-                        onChange={(e) =>
-                          updateSlot(day, index, "startTime", e.target.value)
-                        }
-                        className="input"
-                      />
-                      <span className="text-gray-500">to</span>
-                      <input
-                        type="time"
-                        value={slot.endTime}
-                        onChange={(e) =>
-                          updateSlot(day, index, "endTime", e.target.value)
-                        }
-                        className="input"
-                      />
-                      <button
-                        onClick={() => removeSlot(day, index)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                      <span className="text-sm text-gray-600 ml-2">
-                        (
-                        {(
-                          (parseTime(slot.endTime) -
-                            parseTime(slot.startTime)) /
-                          60
-                        ).toFixed(1)}{" "}
-                        hrs)
+        <div className="space-y-3">
+          {DAYS_OF_WEEK.map((day, dayIndex) => {
+            const weekDay = weekDates[dayIndex];
+            return (
+              <div key={day} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                <div className="flex justify-between items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h4 className="font-semibold text-gray-800 truncate">
+                      {weekDay.fullDateLabel}
+                    </h4>
+                    {weekDay.isToday && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-primary-100 text-primary-700 shrink-0">
+                        Today
                       </span>
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => addSlot(day)}
+                      className="btn-primary flex items-center justify-center gap-2 text-sm h-[38px] px-3 w-full min-w-36"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Slot
+                    </button>
+                    {availability[day]?.length > 0 && (
+                      <>
+                        <select
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              copyDay(day, e.target.value);
+                              e.target.value = "";
+                            }
+                          }}
+                          className="input w-auto min-w-32 h-[38px] text-sm py-2 px-3"
+                          aria-label={`Copy ${day} to another day`}
+                        >
+                          <option value="">Copy to...</option>
+                          {DAYS_OF_WEEK.filter((d) => d !== day).map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => clearDay(day)}
+                          className="h-[38px] px-3 text-red-600 hover:bg-red-50 rounded font-medium text-sm"
+                        >
+                          Clear
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <p className="text-gray-400 text-sm">
-                  Not available on this day
-                </p>
-              )}
-            </div>
-          ))}
+
+                {availability[day]?.length > 0 ? (
+                  <div className="space-y-2">
+                    {availability[day].map((slot, index) => (
+                      <div
+                        key={index}
+                        className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2"
+                      >
+                        <input
+                          type="time"
+                          value={slot.startTime}
+                          onChange={(e) => updateSlot(day, index, "startTime", e.target.value)}
+                          className="input w-full min-w-0"
+                          aria-label={`${day} slot ${index + 1} start`}
+                        />
+                        <input
+                          type="time"
+                          value={slot.endTime}
+                          onChange={(e) => updateSlot(day, index, "endTime", e.target.value)}
+                          className="input w-full min-w-0"
+                          aria-label={`${day} slot ${index + 1} end`}
+                        />
+                        <span className="text-xs text-gray-500 whitespace-nowrap">
+                          ({((parseTime(slot.endTime) - parseTime(slot.startTime)) / 60).toFixed(1)}{" "}
+                          hrs)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeSlot(day, index)}
+                          className="p-2 h-[38px] w-[38px] flex items-center justify-center text-red-600 hover:bg-red-50 rounded shrink-0"
+                          aria-label={`Remove slot ${index + 1}`}
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm mt-0">Not available on this day</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Time Off */}
       <div className="card">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold flex items-center gap-2">
-            <AlertCircle className="h-6 w-6 text-orange-600" />
+          <h3 className="text-xl font-semibold flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-orange-600" />
             Time Off
           </h3>
           <button
+            type="button"
             onClick={addTimeOff}
-            className="btn-secondary flex items-center gap-2 text-sm"
+            className="btn-secondary flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
             Add Time Off
@@ -449,51 +462,45 @@ function AvailabilityManager({ careGiver, onSave }) {
         {timeOff.length > 0 ? (
           <div className="space-y-3">
             {timeOff.map((item, index) => (
-              <div key={index} className="border rounded-lg p-4">
+              <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-sm font-medium mb-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
                       Start Date
                     </label>
                     <input
                       type="date"
                       value={item.startDate.split("T")[0]}
-                      onChange={(e) =>
-                        updateTimeOff(index, "startDate", e.target.value)
-                      }
+                      onChange={(e) => updateTimeOff(index, "startDate", e.target.value)}
                       className="input"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
                       End Date
                     </label>
                     <input
                       type="date"
                       value={item.endDate.split("T")[0]}
-                      onChange={(e) =>
-                        updateTimeOff(index, "endDate", e.target.value)
-                      }
+                      onChange={(e) => updateTimeOff(index, "endDate", e.target.value)}
                       className="input"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Reason
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={item.reason || ""}
-                        onChange={(e) =>
-                          updateTimeOff(index, "reason", e.target.value)
-                        }
+                        onChange={(e) => updateTimeOff(index, "reason", e.target.value)}
                         placeholder="Vacation, Sick, etc."
                         className="input flex-1"
                       />
                       <button
+                        type="button"
                         onClick={() => removeTimeOff(index)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        className="p-2 text-red-600 hover:bg-red-50 rounded shrink-0"
+                        aria-label="Remove time off period"
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
@@ -504,35 +511,41 @@ function AvailabilityManager({ careGiver, onSave }) {
             ))}
           </div>
         ) : (
-          <p className="text-gray-400 text-center py-8">
-            No time off periods scheduled
-          </p>
+          <p className="text-gray-500 text-center py-8">No time off periods scheduled</p>
         )}
       </div>
 
-      {/* Visual Summary */}
-      <div className="card bg-blue-50 border-blue-200">
-        <h3 className="text-lg font-semibold mb-3 text-blue-900">
-          Weekly Summary
-        </h3>
-        <div className="grid grid-cols-7 gap-2">
-          {DAYS_OF_WEEK.map((day) => (
-            <div key={day} className="text-center">
-              <div className="text-xs font-medium text-gray-600 mb-1">
-                {day.substring(0, 3)}
-              </div>
+      {/* Weekly Summary */}
+      <div className="card bg-blue-50 border border-blue-200 p-4">
+        <h3 className="text-lg font-semibold mb-2 text-blue-900">Weekly Summary</h3>
+        <div className="grid grid-cols-7 gap-1.5">
+          {weekDates.map((weekDay) => {
+            const day = weekDay.dayName;
+            const slotCount = availability[day]?.length ?? 0;
+            return (
               <div
-                className={`h-16 rounded ${
-                  availability[day]?.length > 0 ? "bg-green-500" : "bg-gray-300"
+                key={day}
+                className={`flex flex-col items-center rounded-lg p-1.5 gap-0.5 ${
+                  weekDay.isToday ? "ring-2 ring-primary-500 bg-primary-50/80" : ""
                 }`}
-              />
-              <div className="text-xs text-gray-600 mt-1">
-                {availability[day]?.length > 0
-                  ? `${availability[day].length} slot${availability[day].length > 1 ? "s" : ""}`
-                  : "Off"}
+              >
+                <div className="text-xs font-medium text-gray-700">{weekDay.shortLabel}</div>
+                <div className="min-h-[1.25rem] flex items-center justify-center">
+                  {weekDay.isToday && (
+                    <span className="text-xs font-medium text-primary-600">Today</span>
+                  )}
+                </div>
+                <div
+                  className={`w-full h-10 rounded shrink-0 ${
+                    slotCount > 0 ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                />
+                <div className="text-xs text-gray-600">
+                  {slotCount > 0 ? `${slotCount} slot${slotCount > 1 ? "s" : ""}` : "Off"}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

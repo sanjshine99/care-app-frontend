@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Users,
   UserCheck,
+  UserCog,
   Calendar,
   MapPin,
   Bell,
@@ -41,6 +42,7 @@ function Sidebar() {
     { to: "/schedule", icon: Calendar, label: "Schedule" },
     { to: "/map", icon: MapPin, label: "Map View" },
     { to: "/notifications", icon: Bell, label: "Notifications", showBadge: true },
+    { to: "/users", icon: UserCog, label: "Users" },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
 

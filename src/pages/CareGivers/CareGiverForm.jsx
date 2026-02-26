@@ -198,37 +198,39 @@ function CareGiverForm() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="text-center py-12">
-          <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full mx-auto" />
-          <p className="text-gray-600 mt-4">Loading...</p>
+  return (
+    <div className="flex flex-col">
+      {/* Header */}
+      <div className="flex-shrink-0 p-6 pb-0">
+        <div className="max-w-5xl mx-auto flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/caregivers')}
+              className="text-gray-500 hover:text-gray-800"
+              title="Back"
+              aria-label="Back to care givers"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <h1 className="text-3xl font-bold text-gray-800">
+              {isEdit ? 'Edit Care Giver' : 'Add New Care Giver'}
+            </h1>
+          </div>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <button
-          onClick={() => navigate('/caregivers')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Care Givers
-        </button>
-        <h1 className="text-3xl font-bold text-gray-800">
-          {isEdit ? 'Edit Care Giver' : 'Add New Care Giver'}
-        </h1>
-      </div>
-
-      <form onSubmit={handleSubmit} className="max-w-3xl">
+      {/* Content */}
+      <div className="px-6">
+        {isEdit && loading ? (
+          <div className="max-w-5xl mx-auto flex items-center justify-center min-h-[200px] py-12">
+            <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" aria-hidden="true" />
+          </div>
+        ) : (
+      <form id="care-giver-form" onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-6 pb-6">
         {/* Personal Information */}
-        <div className="card mb-6">
-          <h2 className="text-xl font-bold mb-4">Personal Information</h2>
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -316,8 +318,8 @@ function CareGiverForm() {
         </div>
 
         {/* Address */}
-        <div className="card mb-6">
-          <h2 className="text-xl font-bold mb-4">Address <span className="text-sm font-normal text-blue-600">(UK addresses only)</span></h2>
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Address <span className="text-sm font-normal text-blue-600">(UK addresses only)</span></h2>
 
           <div className="space-y-4">
             <div>
@@ -401,24 +403,16 @@ function CareGiverForm() {
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Country
-                </label>
-                <input
-                  type="text"
-                  value="United Kingdom"
-                  disabled
-                  className="input bg-gray-50 text-gray-500 cursor-not-allowed"
-                />
+              <div className="flex items-end pb-2">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 text-sm" aria-label="Country">United Kingdom</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Skills */}
-        <div className="card mb-6">
-          <h2 className="text-xl font-bold mb-4">Skills & Capabilities *</h2>
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Skills & Capabilities *</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {skillOptions.map((skill) => (
@@ -439,8 +433,8 @@ function CareGiverForm() {
         </div>
 
         {/* Additional Settings */}
-        <div className="card mb-6">
-          <h2 className="text-xl font-bold mb-4">Additional Settings</h2>
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-4">Additional Settings</h2>
           
           <div className="space-y-4">
             <label className="flex items-center gap-2">
@@ -496,35 +490,41 @@ function CareGiverForm() {
             </div>
           </div>
         </div>
+      </form>
+        )}
+      </div>
 
-        {/* Actions */}
-        <div className="flex gap-4">
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn-primary flex items-center gap-2"
-          >
-            {saving ? (
-              <>
-                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <Save className="h-5 w-5" />
-                <span>{isEdit ? 'Update' : 'Create'} Care Giver</span>
-              </>
-            )}
-          </button>
+      {/* Fixed Footer */}
+      <div className="flex-shrink-0 border-t bg-white px-6 py-4">
+        <div className="max-w-5xl mx-auto flex justify-end gap-3">
           <button
             type="button"
             onClick={() => navigate('/caregivers')}
             className="btn-secondary"
+            disabled={saving}
           >
             Cancel
           </button>
+          <button
+            type="submit"
+            form="care-giver-form"
+            className="btn-primary flex items-center gap-2"
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-5 w-5" />
+                {isEdit ? 'Update' : 'Create'} Care Giver
+              </>
+            )}
+          </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

@@ -3,12 +3,16 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import moment from "moment";
 import {
   Calendar as CalendarIcon,
   RefreshCw,
   Plus,
   AlertCircle,
   AlertTriangle,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import CalendarView from "./CalendarView";
@@ -237,8 +241,77 @@ function Schedule() {
   };
 
   const handleRangeChange = (start, end) => {
-    console.log(" Date range changed");
     setDateRange({ start, end });
+  };
+
+  const handleApplyDateRange = () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+    if (moment(dateRange.start).isAfter(moment(dateRange.end))) {
+      toast.error("Start date must be before end date");
+      return;
+    }
+    toast.success(
+      `Showing appointments from ${moment(dateRange.start).format("MMM D")} to ${moment(dateRange.end).format("MMM D, YYYY")}`,
+    );
+  };
+
+  const handleQuickRange = (range) => {
+    let start;
+    let end;
+
+    switch (range) {
+      case "today":
+        start = moment().startOf("day");
+        end = moment().endOf("day");
+        break;
+      case "this_week":
+        start = moment().startOf("week");
+        end = moment().endOf("week");
+        break;
+      case "this_month":
+        start = moment().startOf("month");
+        end = moment().endOf("month");
+        break;
+      case "last_month":
+        start = moment().subtract(1, "month").startOf("month");
+        end = moment().subtract(1, "month").endOf("month");
+        break;
+      case "all_time":
+        start = moment().subtract(90, "days").startOf("day");
+        end = moment().add(30, "days").endOf("day");
+        break;
+      default:
+        return;
+    }
+
+    setDateRange({ start: start.toDate(), end: end.toDate() });
+  };
+
+  const handlePreviousMonth = () => {
+    const newStart = moment(dateRange.start)
+      .subtract(1, "month")
+      .startOf("month")
+      .toDate();
+    const newEnd = moment(dateRange.start)
+      .subtract(1, "month")
+      .endOf("month")
+      .toDate();
+    setDateRange({ start: newStart, end: newEnd });
+  };
+
+  const handleNextMonth = () => {
+    const newStart = moment(dateRange.start)
+      .add(1, "month")
+      .startOf("month")
+      .toDate();
+    const newEnd = moment(dateRange.start)
+      .add(1, "month")
+      .endOf("month")
+      .toDate();
+    setDateRange({ start: newStart, end: newEnd });
   };
 
   const handleGenerateSchedule = () => {
@@ -273,15 +346,16 @@ function Schedule() {
   const needsReassignmentCount = needsReassignment.length;
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 flex flex-col">
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
             <CalendarIcon className="h-8 w-8 text-primary-600" />
             Schedule Management
           </h1>
-          <p className="text-gray-600 mt-1">View and manage appointments</p>
+          <p className="text-gray-600 mt-2">View and manage appointments</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -338,6 +412,124 @@ function Schedule() {
         <div className="card">
           <h3 className="text-sm font-medium text-gray-600 mb-1">Completed</h3>
           <p className="text-2xl font-bold text-green-600">{completedCount}</p>
+        </div>
+      </div>
+
+      {/* Filter by Date Range - shared for all tabs */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-5 w-5 text-gray-600" />
+            <h3 className="font-semibold text-lg">Filter by Date Range</h3>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePreviousMonth}
+              className="p-2 hover:bg-gray-100 rounded"
+              title="Previous month"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <span className="text-sm font-medium px-3">
+              {moment(dateRange.start).format("MMMM YYYY")}
+            </span>
+            <button
+              onClick={handleNextMonth}
+              className="p-2 hover:bg-gray-100 rounded"
+              title="Next month"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            onClick={() => handleQuickRange("today")}
+            className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => handleQuickRange("this_week")}
+            className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
+          >
+            This Week
+          </button>
+          <button
+            onClick={() => handleQuickRange("this_month")}
+            className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+          >
+            This Month
+          </button>
+          <button
+            onClick={() => handleQuickRange("last_month")}
+            className="px-3 py-1.5 text-sm bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+          >
+            Last Month
+          </button>
+          <button
+            onClick={() => handleQuickRange("all_time")}
+            className="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200"
+          >
+            Last 90 Days
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Date
+            </label>
+            <input
+              type="date"
+              value={formatDateForAPI(dateRange.start)}
+              onChange={(e) =>
+                setDateRange((prev) => ({
+                  ...prev,
+                  start: new Date(e.target.value),
+                }))
+              }
+              className="input w-full"
+            />
+          </div>
+
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Date
+            </label>
+            <input
+              type="date"
+              value={formatDateForAPI(dateRange.end)}
+              onChange={(e) =>
+                setDateRange((prev) => ({
+                  ...prev,
+                  end: new Date(e.target.value),
+                }))
+              }
+              min={formatDateForAPI(dateRange.start)}
+              className="input w-full"
+            />
+          </div>
+
+          <button
+            onClick={handleApplyDateRange}
+            disabled={!dateRange.start || !dateRange.end}
+            className="btn-primary flex items-center gap-2 whitespace-nowrap"
+          >
+            <CalendarIcon className="h-5 w-5" />
+            Apply Filter
+          </button>
+        </div>
+
+        <div className="mt-3 text-sm text-gray-600">
+          <p>
+            Showing:{" "}
+            <strong>{moment(dateRange.start).format("MMM D, YYYY")}</strong> to{" "}
+            <strong>{moment(dateRange.end).format("MMM D, YYYY")}</strong> (
+            {appointments.length} appointments)
+          </p>
         </div>
       </div>
 
@@ -430,7 +622,8 @@ function Schedule() {
 
               <CalendarView
                 appointments={appointments}
-                onRangeChange={handleRangeChange}
+                startDate={formatDateForAPI(dateRange.start)}
+                endDate={formatDateForAPI(dateRange.end)}
                 onRefresh={handleRefresh}
                 loading={loading}
               />
@@ -556,6 +749,7 @@ function Schedule() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

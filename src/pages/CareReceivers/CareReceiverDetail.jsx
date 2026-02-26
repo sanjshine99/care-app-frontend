@@ -96,15 +96,15 @@ function CareReceiverDetail() {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center">
-        <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" />
+      <div className="p-6 flex items-center justify-center min-h-[200px] py-12">
+        <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" aria-hidden="true" />
       </div>
     );
   }
 
   if (!careReceiver) {
     return (
-      <div className="p-8 text-center">
+      <div className="p-6 flex items-center justify-center min-h-[200px] py-12">
         <p className="text-gray-600">Care receiver not found</p>
       </div>
     );
@@ -113,12 +113,14 @@ function CareReceiverDetail() {
   const age = careReceiver.age || "N/A";
 
   return (
-    <div className="p-8">
+    <div className="p-6 flex flex-col">
       {/* Header */}
       <div className="mb-8">
         <button
+          type="button"
           onClick={() => navigate("/carereceivers")}
-          className="text-primary-600 hover:text-primary-700 mb-4 flex items-center gap-2"
+          className="btn-secondary flex items-center gap-2 mb-4"
+          aria-label="Back to Care Receivers"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Care Receivers

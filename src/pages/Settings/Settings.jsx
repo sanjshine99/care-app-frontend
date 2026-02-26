@@ -137,19 +137,8 @@ function Settings() {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-8">
-      {/* Header */}
+    <div className="p-6 flex flex-col">
       <div className="mb-8">
         <div className="flex justify-between items-start">
           <div>
@@ -185,7 +174,13 @@ function Settings() {
         </div>
       </div>
 
-      <div className="max-w-4xl">
+      <div className="max-w-5xl mx-auto w-full">
+        {loading ? (
+          <div className="flex items-center justify-center min-h-[200px] py-12">
+            <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" aria-hidden="true" />
+          </div>
+        ) : (
+        <>
         {/* Scheduling Settings */}
         <div className="card mb-6">
           <div className="flex items-center gap-3 mb-6">
@@ -623,6 +618,8 @@ function Settings() {
             generated. Existing appointments will not be affected.
           </p>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

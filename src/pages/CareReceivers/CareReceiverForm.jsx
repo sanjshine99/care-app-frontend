@@ -1,10 +1,10 @@
 // frontend/src/pages/CareReceivers/CareReceiverForm.jsx
 // ENHANCED - Flexible visit scheduling with days of week and recurrence patterns
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Save, X, Plus, Trash2, Clock, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { Save, ArrowLeft, Plus, Trash2, Clock, Calendar, ChevronDown, ChevronUp } from "lucide-react";
 import { careReceiverService } from "../../services/careReceiverService";
 
 const SKILLS = [
@@ -46,15 +46,28 @@ const RECURRENCE_PATTERNS = [
   { value: "custom", label: "Custom Interval" },
 ];
 
+const NOTES_TEXTAREA_MAX_HEIGHT_PX = 192;
+const VISIT_NOTES_TEXTAREA_MAX_HEIGHT_PX = 120;
+
+function adjustTextareaHeight(el, maxHeightPx = NOTES_TEXTAREA_MAX_HEIGHT_PX) {
+  if (!el) return;
+  el.style.height = "auto";
+  const height = Math.min(el.scrollHeight, maxHeightPx);
+  el.style.height = `${height}px`;
+  el.style.overflowY = el.scrollHeight > maxHeightPx ? "auto" : "hidden";
+}
+
 function CareReceiverForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
 
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [expandedVisits, setExpandedVisits] = useState({});
   const [addressErrors, setAddressErrors] = useState({ street: "", city: "", postcode: "" });
   const [postcodeStatus, setPostcodeStatus] = useState(null); // null | 'validating' | 'valid' | 'invalid'
+  const notesTextareaRef = useRef(null);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -83,6 +96,10 @@ function CareReceiverForm() {
     }
   }, [id]);
 
+  useEffect(() => {
+    adjustTextareaHeight(notesTextareaRef.current, NOTES_TEXTAREA_MAX_HEIGHT_PX);
+  }, [formData.notes]);
+
   const loadCareReceiver = async () => {
     try {
       setLoading(true);
@@ -90,7 +107,8 @@ function CareReceiverForm() {
       if (response.success) {
         const careReceiver = response.data.careReceiver;
 
-        // Ensure each visit has the new fields (backward compatibility)
+        // Ensure each visit has the new fields (backward compatibility). Keep _id so backend
+        // can tell existing vs new visits and only mark reassignment when existing visit schedule changes.
         if (careReceiver.dailyVisits) {
           careReceiver.dailyVisits = careReceiver.dailyVisits.map((visit) => ({
             ...visit,
@@ -102,6 +120,10 @@ function CareReceiverForm() {
         }
 
         setFormData(careReceiver);
+        const postcode = careReceiver.address?.postcode?.trim();
+        if (postcode) {
+          validatePostcode(postcode);
+        }
       }
     } catch (error) {
       toast.error("Failed to load care receiver");
@@ -225,6 +247,18 @@ function CareReceiverForm() {
     setFormData((prev) => ({ ...prev, dailyVisits: updated }));
   };
 
+  const handleRecurrencePatternChange = (index, patternValue) => {
+    const interval =
+      patternValue === "biweekly" ? 2 : patternValue === "monthly" ? 4 : formData.dailyVisits[index].recurrenceInterval || 1;
+    const updated = [...formData.dailyVisits];
+    updated[index] = {
+      ...updated[index],
+      recurrencePattern: patternValue,
+      recurrenceInterval: patternValue === "biweekly" ? 2 : patternValue === "monthly" ? 4 : interval,
+    };
+    setFormData((prev) => ({ ...prev, dailyVisits: updated }));
+  };
+
   const toggleRequirement = (visitIndex, requirement) => {
     const visit = formData.dailyVisits[visitIndex];
     const requirements = visit.requirements.includes(requirement)
@@ -233,7 +267,6 @@ function CareReceiverForm() {
     updateDailyVisit(visitIndex, "requirements", requirements);
   };
 
-  // NEW: Toggle day of week
   const toggleDayOfWeek = (visitIndex, day) => {
     const visit = formData.dailyVisits[visitIndex];
     const daysOfWeek = visit.daysOfWeek || DAYS_OF_WEEK;
@@ -250,7 +283,6 @@ function CareReceiverForm() {
     updateDailyVisit(visitIndex, "daysOfWeek", newDays);
   };
 
-  // NEW: Quick select for days
   const quickSelectDays = (visitIndex, selection) => {
     let days = [];
     switch (selection) {
@@ -309,7 +341,6 @@ function CareReceiverForm() {
         );
         return;
       }
-      // NEW: Validate days of week
       if (!visit.daysOfWeek || visit.daysOfWeek.length === 0) {
         toast.error(
           `Visit ${visit.visitNumber}: Please select at least one day of the week`
@@ -319,46 +350,61 @@ function CareReceiverForm() {
     }
 
     try {
-      setLoading(true);
+      setSaving(true);
 
+      let response;
       if (isEdit) {
-        await careReceiverService.update(id, formData);
-        toast.success("Care receiver updated successfully");
+        response = await careReceiverService.update(id, formData);
       } else {
-        await careReceiverService.create(formData);
-        toast.success("Care receiver created successfully");
+        response = await careReceiverService.create(formData);
       }
 
-      navigate("/carereceivers");
+      const careReceiver = response?.data?.careReceiver;
+      const scheduleGenerationQueued = Boolean(response?.scheduleGenerationQueued);
+      const careReceiverId = isEdit ? id : careReceiver?._id;
+
+      if (scheduleGenerationQueued) {
+        toast.info(
+          "Care receiver saved. Auto-scheduling in progress — you'll get a notification when done."
+        );
+        navigate("/carereceivers", {
+          state: { scheduleGenerationQueued: true, careReceiverId },
+        });
+      } else {
+        toast.success(
+          isEdit
+            ? "Care receiver updated successfully"
+            : "Care receiver created successfully"
+        );
+        navigate("/carereceivers");
+      }
+
+      if (response?.warning) {
+        toast.warning(response.warning);
+      }
     } catch (error) {
       const message =
         error.response?.data?.error?.message || "Failed to save care receiver";
       toast.error(message);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  if (loading && isEdit) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full flex flex-col">
-      {/* Fixed Header */}
+    <div className="flex flex-col">
+      {/* Header */}
       <div className="flex-shrink-0 p-6 pb-0">
         <div className="max-w-5xl mx-auto flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => navigate("/carereceivers")}
               className="text-gray-500 hover:text-gray-800"
               title="Back"
+              aria-label="Back to care receivers"
             >
-              <X className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5" />
             </button>
             <h1 className="text-3xl font-bold text-gray-800">
               {isEdit ? "Edit Care Receiver" : "New Care Receiver"}
@@ -367,18 +413,24 @@ function CareReceiverForm() {
         </div>
       </div>
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-6">
+      {/* Content - no inner scroll; main layout scrolls */}
+      <div className="px-6">
+        {isEdit && loading ? (
+          <div className="max-w-5xl mx-auto flex items-center justify-center min-h-[200px] py-12">
+            <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" aria-hidden="true" />
+          </div>
+        ) : (
         <form id="care-receiver-form" onSubmit={handleSubmit} className="max-w-5xl mx-auto space-y-6 pb-6">
           {/* Basic Information */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">Basic Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                   Full Name *
                 </label>
                 <input
+                  id="name"
                   type="text"
                   name="name"
                   value={formData.name}
@@ -391,10 +443,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">
                   Date of Birth *
                 </label>
                 <input
+                  id="dateOfBirth"
                   type="date"
                   name="dateOfBirth"
                   value={formData.dateOfBirth?.split("T")[0] || ""}
@@ -405,10 +458,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
                   Phone *
                 </label>
                 <input
+                  id="phone"
                   type="tel"
                   name="phone"
                   value={formData.phone}
@@ -420,10 +474,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                   Email
                 </label>
                 <input
+                  id="email"
                   type="email"
                   name="email"
                   value={formData.email}
@@ -433,10 +488,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">
                   Gender
                 </label>
                 <select
+                  id="gender"
                   name="gender"
                   value={formData.gender}
                   onChange={handleChange}
@@ -451,10 +507,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="genderPreference" className="block text-sm font-medium text-gray-700 mb-2">
                   Preferred Care Giver Gender
                 </label>
                 <select
+                  id="genderPreference"
                   name="genderPreference"
                   value={formData.genderPreference}
                   onChange={handleChange}
@@ -473,10 +530,11 @@ function CareReceiverForm() {
             <h2 className="text-xl font-semibold mb-4">Address <span className="text-sm font-normal text-blue-600">(UK addresses only)</span></h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="address-street" className="block text-sm font-medium text-gray-700 mb-2">
                   Street Address *
                 </label>
                 <input
+                  id="address-street"
                   type="text"
                   name="address.street"
                   value={formData.address.street}
@@ -492,10 +550,11 @@ function CareReceiverForm() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="address-city" className="block text-sm font-medium text-gray-700 mb-2">
                     City *
                   </label>
                   <input
+                    id="address-city"
                     type="text"
                     name="address.city"
                     value={formData.address.city}
@@ -510,11 +569,12 @@ function CareReceiverForm() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="address-postcode" className="block text-sm font-medium text-gray-700 mb-2">
                     Postcode *
                   </label>
                   <div className="relative">
                     <input
+                      id="address-postcode"
                       type="text"
                       name="address.postcode"
                       value={formData.address.postcode}
@@ -551,22 +611,14 @@ function CareReceiverForm() {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Country
-                  </label>
-                  <input
-                    type="text"
-                    value="United Kingdom"
-                    disabled
-                    className="input bg-gray-50 text-gray-500 cursor-not-allowed"
-                  />
+                <div className="flex items-end pb-2">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 text-sm" aria-label="Country">United Kingdom</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Daily Visits - ENHANCED */}
+          {/* Daily Visits */}
           <div className="card">
             <div className="flex justify-between items-center mb-4">
               <div>
@@ -632,6 +684,7 @@ function CareReceiverForm() {
                         }}
                         className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded"
                         title="Remove visit"
+                        aria-label={`Remove visit ${visit.visitNumber}`}
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
@@ -639,14 +692,15 @@ function CareReceiverForm() {
 
                     {/* Collapsible Content */}
                     {isExpanded && (
-                    <div className="p-5 pt-0">
+                    <div className="p-5 pt-0" onClick={(e) => e.stopPropagation()}>
                     {/* Time and Duration */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor={`visit-${index}-preferredTime`} className="block text-sm font-medium text-gray-700 mb-2">
                           Preferred Time *
                         </label>
                         <input
+                          id={`visit-${index}-preferredTime`}
                           type="time"
                           value={visit.preferredTime}
                           onChange={(e) =>
@@ -662,19 +716,20 @@ function CareReceiverForm() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor={`visit-${index}-duration`} className="block text-sm font-medium text-gray-700 mb-2">
                           Duration (minutes) *
                         </label>
                         <input
+                          id={`visit-${index}-duration`}
                           type="number"
                           value={visit.duration}
-                          onChange={(e) =>
-                            updateDailyVisit(
-                              index,
-                              "duration",
-                              parseInt(e.target.value)
-                            )
-                          }
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            const clamped = Number.isNaN(v)
+                              ? 15
+                              : Math.min(240, Math.max(15, v));
+                            updateDailyVisit(index, "duration", clamped);
+                          }}
                           min="15"
                           max="240"
                           className="input"
@@ -686,10 +741,11 @@ function CareReceiverForm() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label htmlFor={`visit-${index}-priority`} className="block text-sm font-medium text-gray-700 mb-2">
                           Priority
                         </label>
                         <select
+                          id={`visit-${index}-priority`}
                           value={visit.priority}
                           onChange={(e) =>
                             updateDailyVisit(
@@ -709,8 +765,10 @@ function CareReceiverForm() {
                       </div>
                     </div>
 
-                    {/* ========== NEW: Days of Week Selector ========== */}
-                    <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200">
+                    <div
+                      className="mb-4 p-4 bg-white rounded-lg border border-gray-200"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className="flex justify-between items-center mb-3">
                         <label className="block text-sm font-medium text-gray-700">
                           Days of Week *
@@ -718,64 +776,69 @@ function CareReceiverForm() {
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => quickSelectDays(index, "all")}
-                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              quickSelectDays(index, "all");
+                            }}
+                            className="text-sm px-3 py-2 min-h-[44px] bg-gray-100 hover:bg-gray-200 rounded"
                           >
                             All Days
                           </button>
                           <button
                             type="button"
-                            onClick={() => quickSelectDays(index, "weekdays")}
-                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              quickSelectDays(index, "weekdays");
+                            }}
+                            className="text-sm px-3 py-2 min-h-[44px] bg-gray-100 hover:bg-gray-200 rounded"
                           >
                             Weekdays
                           </button>
                           <button
                             type="button"
-                            onClick={() => quickSelectDays(index, "weekends")}
-                            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              quickSelectDays(index, "weekends");
+                            }}
+                            className="text-sm px-3 py-2 min-h-[44px] bg-gray-100 hover:bg-gray-200 rounded"
                           >
                             Weekends
                           </button>
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {DAYS_OF_WEEK.map((day) => (
-                          <label
-                            key={day}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all ${
-                              (visit.daysOfWeek || DAYS_OF_WEEK).includes(day)
-                                ? "bg-primary-100 border-2 border-primary-600 text-primary-900 font-semibold"
-                                : "bg-white border-2 border-gray-300 text-gray-600 hover:border-gray-400"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={(
-                                visit.daysOfWeek || DAYS_OF_WEEK
-                              ).includes(day)}
-                              onChange={() => toggleDayOfWeek(index, day)}
-                              className="sr-only"
-                            />
-                            <span className="text-sm">{day.slice(0, 3)}</span>
-                          </label>
-                        ))}
+                        {DAYS_OF_WEEK.map((day) => {
+                          const isSelected = (visit.daysOfWeek || DAYS_OF_WEEK).includes(day);
+                          return (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleDayOfWeek(index, day);
+                              }}
+                              className={`flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all ${
+                                isSelected
+                                  ? "bg-primary-100 border-2 border-primary-600 text-primary-900 font-semibold"
+                                  : "bg-white border-2 border-gray-300 text-gray-600 hover:border-gray-400"
+                              }`}
+                              aria-pressed={isSelected}
+                              aria-label={`${day}, ${isSelected ? "selected" : "not selected"}`}
+                            >
+                              <span className="text-sm">{day.slice(0, 3)}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                      {(visit.daysOfWeek || DAYS_OF_WEEK).length === 7 && (
-                        <p className="text-xs text-green-600 mt-2">
-                          ✓ Visit will occur every day
-                        </p>
-                      )}
-                      {(visit.daysOfWeek || DAYS_OF_WEEK).length < 7 && (
-                        <p className="text-xs text-blue-600 mt-2">
-                          ✓ Visit will occur on{" "}
-                          {(visit.daysOfWeek || DAYS_OF_WEEK).length} day(s) per
-                          week
-                        </p>
-                      )}
+                      <p className="text-xs text-gray-600 mt-2">
+                        Visit will occur on{" "}
+                        {(visit.daysOfWeek || DAYS_OF_WEEK).length === 7
+                          ? "all 7 days"
+                          : `${(visit.daysOfWeek || DAYS_OF_WEEK).length} day(s) per week`}.
+                      </p>
                     </div>
 
-                    {/* ========== NEW: Recurrence Pattern ========== */}
                     <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Recurrence Pattern *
@@ -783,11 +846,7 @@ function CareReceiverForm() {
                       <select
                         value={visit.recurrencePattern || "weekly"}
                         onChange={(e) =>
-                          updateDailyVisit(
-                            index,
-                            "recurrencePattern",
-                            e.target.value
-                          )
+                          handleRecurrencePatternChange(index, e.target.value)
                         }
                         className="input mb-3"
                       >
@@ -798,10 +857,8 @@ function CareReceiverForm() {
                         ))}
                       </select>
 
-                      {/* Custom Interval Input */}
-                      {(visit.recurrencePattern === "custom" ||
-                        visit.recurrencePattern === "biweekly" ||
-                        visit.recurrencePattern === "monthly") && (
+                      {/* Custom Interval Input - only for custom pattern */}
+                      {visit.recurrencePattern === "custom" && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Interval (weeks) *
@@ -811,13 +868,17 @@ function CareReceiverForm() {
                             min="1"
                             max="52"
                             value={visit.recurrenceInterval || 1}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              const clamped = Number.isNaN(v)
+                                ? 1
+                                : Math.min(52, Math.max(1, v));
                               updateDailyVisit(
                                 index,
                                 "recurrenceInterval",
-                                parseInt(e.target.value)
-                              )
-                            }
+                                clamped
+                              );
+                            }}
                             className="input"
                           />
                           <p className="text-xs text-gray-500 mt-1">
@@ -856,7 +917,6 @@ function CareReceiverForm() {
                         )}
                       </div>
                     </div>
-                    {/* ========================================== */}
 
                     {/* Requirements */}
                     <div className="mb-4">
@@ -910,12 +970,22 @@ function CareReceiverForm() {
                         Notes
                       </label>
                       <textarea
-                        value={visit.notes}
-                        onChange={(e) =>
-                          updateDailyVisit(index, "notes", e.target.value)
+                        ref={(el) =>
+                          el &&
+                          adjustTextareaHeight(el, VISIT_NOTES_TEXTAREA_MAX_HEIGHT_PX)
                         }
-                        className="input"
-                        rows="2"
+                        value={visit.notes}
+                        onChange={(e) => {
+                          updateDailyVisit(index, "notes", e.target.value);
+                          requestAnimationFrame(() =>
+                            adjustTextareaHeight(
+                              e.target,
+                              VISIT_NOTES_TEXTAREA_MAX_HEIGHT_PX
+                            )
+                          );
+                        }}
+                        className="input resize-none overflow-hidden"
+                        rows={2}
                         maxLength="300"
                         placeholder="Any special instructions..."
                       />
@@ -934,10 +1004,11 @@ function CareReceiverForm() {
             <h2 className="text-xl font-semibold mb-4">Emergency Contact</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="emergencyContact-name" className="block text-sm font-medium text-gray-700 mb-2">
                   Name *
                 </label>
                 <input
+                  id="emergencyContact-name"
                   type="text"
                   name="emergencyContact.name"
                   value={formData.emergencyContact.name}
@@ -948,10 +1019,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="emergencyContact-relationship" className="block text-sm font-medium text-gray-700 mb-2">
                   Relationship *
                 </label>
                 <select
+                  id="emergencyContact-relationship"
                   name="emergencyContact.relationship"
                   value={formData.emergencyContact.relationship}
                   onChange={handleChange}
@@ -968,10 +1040,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="emergencyContact-phone" className="block text-sm font-medium text-gray-700 mb-2">
                   Phone *
                 </label>
                 <input
+                  id="emergencyContact-phone"
                   type="tel"
                   name="emergencyContact.phone"
                   value={formData.emergencyContact.phone}
@@ -983,10 +1056,11 @@ function CareReceiverForm() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="emergencyContact-email" className="block text-sm font-medium text-gray-700 mb-2">
                   Email
                 </label>
                 <input
+                  id="emergencyContact-email"
                   type="email"
                   name="emergencyContact.email"
                   value={formData.emergencyContact.email}
@@ -1000,18 +1074,22 @@ function CareReceiverForm() {
           {/* Notes */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">Additional Notes</h2>
+            <label htmlFor="notes" className="sr-only">Additional notes</label>
             <textarea
+              ref={notesTextareaRef}
+              id="notes"
               name="notes"
               value={formData.notes}
               onChange={handleChange}
-              className="input"
-              rows="4"
+              className="input resize-none overflow-hidden"
+              rows={3}
               maxLength="1000"
               placeholder="Any additional information about the care receiver..."
             />
           </div>
 
         </form>
+        )}
       </div>
 
       {/* Fixed Footer */}
@@ -1021,7 +1099,7 @@ function CareReceiverForm() {
             type="button"
             onClick={() => navigate("/carereceivers")}
             className="btn-secondary"
-            disabled={loading}
+            disabled={saving}
           >
             Cancel
           </button>
@@ -1029,11 +1107,11 @@ function CareReceiverForm() {
             type="submit"
             form="care-receiver-form"
             className="btn-primary flex items-center gap-2"
-            disabled={loading}
+            disabled={saving}
           >
-            {loading ? (
+            {saving ? (
               <>
-                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" aria-hidden="true" />
                 Saving...
               </>
             ) : (

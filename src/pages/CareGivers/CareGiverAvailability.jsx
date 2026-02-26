@@ -34,42 +34,52 @@ function CareGiverAvailability() {
     try {
       await careGiverService.update(id, data);
       toast.success("Availability updated successfully");
-      loadCareGiver(); // Reload to get fresh data
+      loadCareGiver();
     } catch (error) {
       throw error;
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="text-center py-12">
-          <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full mx-auto" />
-          <p className="text-gray-600 mt-4">Loading...</p>
+  return (
+    <div className="flex flex-col">
+      <div className="flex-shrink-0 p-6 pb-0">
+        <div className="max-w-5xl mx-auto flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/caregivers")}
+              className="text-gray-500 hover:text-gray-800"
+              title="Back"
+              aria-label="Back to care givers"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">
+                Availability for {careGiver?.name ?? "Care Giver"}
+              </h1>
+              <p className="text-gray-600 mt-2">
+                Manage weekly schedule and time-off periods
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="p-8">
-      <div className="mb-8">
-        <button
-          onClick={() => navigate("/caregivers")}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="h-5 w-5" />
-          Back to Care Givers
-        </button>
-        <h1 className="text-3xl font-bold text-gray-800">
-          Availability for {careGiver?.name}
-        </h1>
-        <p className="text-gray-600 mt-2">
-          Manage weekly schedule and time-off periods
-        </p>
+      <div className="px-6 flex-1 min-h-0">
+        <div className="max-w-5xl mx-auto">
+          {loading ? (
+            <div className="flex items-center justify-center min-h-[200px] py-12">
+              <div
+                className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full"
+                aria-hidden="true"
+              />
+            </div>
+          ) : (
+            <AvailabilityManager careGiver={careGiver} onSave={handleSave} />
+          )}
+        </div>
       </div>
-
-      <AvailabilityManager careGiver={careGiver} onSave={handleSave} />
     </div>
   );
 }
