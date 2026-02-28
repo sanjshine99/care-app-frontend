@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
+import { getSkillLabel } from "../../constants/skills";
 
 function ManualScheduleModal({
   careReceiver: initialCareReceiver,
@@ -367,7 +368,7 @@ function ManualScheduleModal({
                     key={idx}
                     className="px-2 py-1 bg-blue-200 text-blue-800 text-xs rounded font-medium"
                   >
-                    {req.replace(/_/g, " ")}
+                    {getSkillLabel(req)}
                   </span>
                 ))}
               </div>
@@ -610,7 +611,7 @@ function ManualScheduleModal({
                                   }`}
                                 >
                                   {isRequired && "✓ "}
-                                  {skill.replace(/_/g, " ")}
+                                  {getSkillLabel(skill)}
                                 </span>
                               );
                             })}

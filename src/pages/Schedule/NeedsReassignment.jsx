@@ -15,6 +15,7 @@ import moment from "moment";
 import { toast } from "react-toastify";
 import ManualScheduleModal from "./ManualScheduleModal";
 import api from "../../services/api";
+import { getSkillLabel } from "../../constants/skills";
 
 function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -200,7 +201,7 @@ function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
                           key={i}
                           className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded"
                         >
-                          {skill.replace(/_/g, " ")}
+                          {getSkillLabel(skill)}
                         </span>
                       ))}
                     </div>

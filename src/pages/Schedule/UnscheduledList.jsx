@@ -6,6 +6,7 @@ import { AlertTriangle, User, Clock, X } from "lucide-react";
 import moment from "moment";
 import api from "../../services/api";
 import { toast } from "react-toastify";
+import { getSkillLabel } from "../../constants/skills";
 import ManualScheduleModal from "./ManualScheduleModal";
 
 function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
@@ -138,7 +139,7 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
                                   key={i}
                                   className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded"
                                 >
-                                  {skill.replace(/_/g, " ")}
+                                  {getSkillLabel(skill)}
                                 </span>
                               ))}
                             </div>
@@ -223,7 +224,7 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
                           key={i}
                           className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded"
                         >
-                          {skill.replace(/_/g, " ")}
+                          {getSkillLabel(skill)}
                         </span>
                       ))}
                     </div>

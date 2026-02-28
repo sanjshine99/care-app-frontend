@@ -26,6 +26,7 @@ function Map() {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const markers = useRef([]);
+  const updateMarkersRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,21 +68,26 @@ function Map() {
     map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
     map.current.addControl(new mapboxgl.FullscreenControl(), "top-right");
 
-    // Wait for map to load
+    let moveendHandler = null;
+
     map.current.on("load", () => {
       console.log("Map loaded successfully");
-      setMapReady(true); // Mark map as ready
+      setMapReady(true);
       setLoading(false);
+      moveendHandler = () => updateMarkersRef.current?.();
+      map.current.on("moveend", moveendHandler);
     });
 
-    // Cleanup on unmount
     return () => {
       if (map.current) {
+        if (moveendHandler) {
+          map.current.off("moveend", moveendHandler);
+        }
         map.current.remove();
         map.current = null;
       }
     };
-  }, []); // Empty dependency array - only run once
+  }, []);
 
   // Load locations on mount
   useEffect(() => {
@@ -214,54 +220,52 @@ function Map() {
 
     console.log(`Added ${markers.current.length} markers to map`);
   };
+  updateMarkersRef.current = updateMarkers;
 
   const createMarkerElement = (type) => {
-    // FIXED: Use wrapper element to prevent marker jumping on hover
-    // Outer container stays fixed, inner element does the scaling
-    const wrapper = document.createElement("div");
-    wrapper.className = "marker-wrapper";
-    wrapper.style.width = "40px";
-    wrapper.style.height = "40px";
-    wrapper.style.cursor = "pointer";
-    wrapper.style.position = "relative";
-
-    const el = document.createElement("div");
-    el.className = "custom-marker";
-    el.style.width = "40px";
-    el.style.height = "40px";
-    el.style.borderRadius = "50%";
-    el.style.display = "flex";
-    el.style.alignItems = "center";
-    el.style.justifyContent = "center";
-    el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
-    el.style.border = "3px solid white";
-    el.style.transition = "transform 0.2s ease-in-out";
-    el.style.position = "absolute";
-    el.style.top = "50%";
-    el.style.left = "50%";
-    el.style.transform = "translate(-50%, -50%)";
+    const root = document.createElement("div");
+    root.className = "marker-root";
+    root.style.width = "40px";
+    root.style.height = "40px";
+    root.style.cursor = "pointer";
+    root.style.display = "flex";
+    root.style.alignItems = "center";
+    root.style.justifyContent = "center";
+    root.style.borderRadius = "50%";
+    root.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+    root.style.border = "3px solid white";
+    root.style.transition = "transform 0.2s ease-in-out";
 
     if (type === "caregiver") {
-      el.style.backgroundColor = "#3B82F6"; // Blue
-      el.innerHTML =
+      root.style.backgroundColor = "#3B82F6";
+    } else {
+      root.style.backgroundColor = "#10B981";
+    }
+
+    const iconWrap = document.createElement("div");
+    iconWrap.style.display = "flex";
+    iconWrap.style.alignItems = "center";
+    iconWrap.style.justifyContent = "center";
+    iconWrap.style.transition = "transform 0.2s ease-in-out";
+
+    if (type === "caregiver") {
+      iconWrap.innerHTML =
         '<svg style="color: white; width: 20px; height: 20px; pointer-events: none;" fill="currentColor" viewBox="0 0 20 20"><path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/></svg>';
     } else {
-      el.style.backgroundColor = "#10B981"; // Green
-      el.innerHTML =
+      iconWrap.innerHTML =
         '<svg style="color: white; width: 20px; height: 20px; pointer-events: none;" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>';
     }
 
-    wrapper.appendChild(el);
+    root.appendChild(iconWrap);
 
-    wrapper.addEventListener("mouseenter", () => {
-      el.style.transform = "translate(-50%, -50%) scale(1.2)";
+    root.addEventListener("mouseenter", () => {
+      iconWrap.style.transform = "scale(1.2)";
+    });
+    root.addEventListener("mouseleave", () => {
+      iconWrap.style.transform = "scale(1)";
     });
 
-    wrapper.addEventListener("mouseleave", () => {
-      el.style.transform = "translate(-50%, -50%) scale(1)";
-    });
-
-    return wrapper;
+    return root;
   };
 
   const createPopup = (location) => {
