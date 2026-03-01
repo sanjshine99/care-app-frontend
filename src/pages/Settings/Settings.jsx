@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function Settings() {
+  const confirmDialog = useConfirmDialog();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
@@ -83,13 +85,13 @@ function Settings() {
   };
 
   const handleReset = async () => {
-    if (
-      !window.confirm(
-        "Are you sure you want to reset all settings to defaults?",
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog.confirm({
+      title: "Reset settings?",
+      message: "Are you sure you want to reset all settings to defaults?",
+      variant: "danger",
+      confirmLabel: "Reset",
+    });
+    if (!ok) return;
 
     try {
       setSaving(true);

@@ -1,5 +1,5 @@
 // frontend/src/pages/Schedule/GenerateSchedule.jsx
-// FIXED - Only loads unscheduled appointments when user clicks button
+// Uses UnscheduledCheckContext: background check, persisted results, toast on completion
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,11 +14,17 @@ import {
 import { toast } from "react-toastify";
 import api from "../../services/api";
 import moment from "moment";
+import { useUnscheduledCheck } from "../../contexts/UnscheduledCheckContext";
+import { useScheduleGeneration } from "../../contexts/ScheduleGenerationContext";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function GenerateSchedule() {
   const navigate = useNavigate();
+  const { lastCheck, isChecking, runCheck } = useUnscheduledCheck();
+  const { lastGeneration, isGenerating, runGeneration, clearLastGeneration } =
+    useScheduleGeneration();
+  const confirmDialog = useConfirmDialog();
 
-  // Default: Next month (1 month range)
   const [startDate, setStartDate] = useState(
     moment().add(1, "day").format("YYYY-MM-DD"),
   );
@@ -28,28 +34,46 @@ function GenerateSchedule() {
 
   const [careReceivers, setCareReceivers] = useState([]);
   const [selectedReceivers, setSelectedReceivers] = useState([]);
-  const [unscheduledSummary, setUnscheduledSummary] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [results, setResults] = useState(null);
   const [showFailureDetails, setShowFailureDetails] = useState(false);
 
-  // ========================================
-  // NEW: Track if user has checked for unscheduled
-  // ========================================
-  const [hasChecked, setHasChecked] = useState(false);
-  // ========================================
+  const results = lastGeneration
+    ? {
+        success: lastGeneration.success,
+        scheduled: lastGeneration.summary?.totalScheduled ?? 0,
+        failed: lastGeneration.summary?.totalFailed ?? 0,
+        details: lastGeneration.results ?? [],
+        error: lastGeneration.error ?? null,
+      }
+    : null;
+  const generating = isGenerating;
 
-  // ========================================
-  // CHANGED: Only load care receivers on mount, NOT unscheduled
-  // ========================================
+  const unscheduledSummary =
+    lastCheck?.data?.unscheduled != null
+      ? {
+          total: lastCheck.data.unscheduled.reduce(
+            (sum, item) => sum + (item.missing || 0),
+            0,
+          ),
+          byCareReceiver: lastCheck.data.unscheduled,
+          lastCheckedAt: lastCheck.completedAt,
+          lastCheckRange: {
+            startDate: lastCheck.startDate,
+            endDate: lastCheck.endDate,
+          },
+        }
+      : null;
+
+  const hasChecked = lastCheck != null;
+  const loading = isChecking;
+  const rangeMatches =
+    lastCheck &&
+    lastCheck.startDate === startDate &&
+    lastCheck.endDate === endDate;
+
   useEffect(() => {
     loadCareReceivers();
-    // REMOVED: loadUnscheduledSummary() - wait for user to click
   }, []);
-  // ========================================
 
-  // Load care receivers
   const loadCareReceivers = async () => {
     try {
       const response = await api.get("/carereceivers", {
@@ -65,57 +89,16 @@ function GenerateSchedule() {
     }
   };
 
-  // Load unscheduled summary
-  const loadUnscheduledSummary = async () => {
-    try {
-      setLoading(true);
-      setHasChecked(true);
-
-      const response = await api.get("/schedule/unscheduled", {
-        params: {
-          startDate: startDate,
-          endDate: endDate,
-        },
-      });
-
-      if (response.data.success) {
-        const unscheduledData = response.data.data.unscheduled || [];
-        const totalUnscheduled = unscheduledData.reduce(
-          (sum, item) => sum + (item.missing || 0),
-          0,
-        );
-
-        setUnscheduledSummary({
-          total: totalUnscheduled,
-          byCareReceiver: unscheduledData,
-        });
-
-        if (totalUnscheduled === 0) {
-          toast.info(" No unscheduled appointments found in this date range");
-        } else {
-          toast.success(`Found ${totalUnscheduled} unscheduled appointments`);
-        }
-      }
-    } catch (error) {
-      console.error("Error loading unscheduled:", error);
-      toast.error("Failed to check unscheduled appointments");
-    } finally {
-      setLoading(false);
-    }
+  const handleCheckUnscheduled = () => {
+    runCheck(startDate, endDate);
   };
 
-  // Update date range (max 1 month)
   const handleStartDateChange = (newStart) => {
     const start = moment(newStart);
     const maxEnd = start.clone().add(1, "month");
 
     setStartDate(start.format("YYYY-MM-DD"));
 
-    // Reset check status when dates change
-    setHasChecked(false);
-    setUnscheduledSummary(null);
-
-    // If current end date is beyond 1 month, adjust it
     if (moment(endDate).isAfter(maxEnd)) {
       setEndDate(maxEnd.format("YYYY-MM-DD"));
       toast.info("End date adjusted to 1 month maximum");
@@ -126,10 +109,6 @@ function GenerateSchedule() {
     const start = moment(startDate);
     const end = moment(newEnd);
     const maxEnd = start.clone().add(1, "month");
-
-    // Reset check status when dates change
-    setHasChecked(false);
-    setUnscheduledSummary(null);
 
     if (end.isAfter(maxEnd)) {
       toast.error("Maximum date range is 1 month");
@@ -172,80 +151,31 @@ function GenerateSchedule() {
     );
   };
 
-  // Generate schedule
   const handleGenerate = async () => {
     if (selectedReceivers.length === 0) {
       toast.error("Please select at least one care receiver");
       return;
     }
 
-    // Confirm
     const unscheduledCount =
       unscheduledSummary?.byCareReceiver
         .filter((item) => selectedReceivers.includes(item.careReceiver.id))
         .reduce((sum, item) => sum + item.missing, 0) || 0;
 
-    if (
-      !window.confirm(
-        `Generate schedule for ${selectedReceivers.length} care receiver(s)?\n\n` +
-          `This will attempt to schedule ${unscheduledCount} unscheduled appointments ` +
-          `from ${moment(startDate).format("MMM D, YYYY")} to ${moment(endDate).format("MMM D, YYYY")}.`,
-      )
-    ) {
-      return;
-    }
+    const message =
+      `Generate schedule for ${selectedReceivers.length} care receiver(s)?\n\n` +
+      `This will attempt to schedule ${unscheduledCount} unscheduled appointments ` +
+      `from ${moment(startDate).format("MMM D, YYYY")} to ${moment(endDate).format("MMM D, YYYY")}. ` +
+      `You can leave this page; you will be notified when generation completes.`;
+    const ok = await confirmDialog.confirm({
+      title: "Generate schedule?",
+      message,
+      confirmLabel: "Generate",
+    });
+    if (!ok) return;
 
-    try {
-      setGenerating(true);
-      setResults(null);
-
-      console.log("Generating schedule...");
-      console.log("Care receivers:", selectedReceivers);
-      console.log("Date range:", startDate, "to", endDate);
-
-      const response = await api.post("/schedule/generate", {
-        careReceiverIds: selectedReceivers,
-        startDate: startDate,
-        endDate: endDate,
-      });
-
-      if (response.data.success) {
-        const summary = response.data.data.summary;
-
-        setShowFailureDetails(false);
-        setResults({
-          success: true,
-          scheduled: summary.totalScheduled || 0,
-          failed: summary.totalFailed || 0,
-          details: response.data.data.results || [],
-        });
-
-        toast.success(
-          ` Scheduled ${summary.totalScheduled} appointments!\n` +
-            (summary.totalFailed > 0
-              ? ` ${summary.totalFailed} could not be scheduled`
-              : ""),
-          { autoClose: 5000 },
-        );
-
-        // Reload unscheduled summary
-        setTimeout(() => {
-          loadUnscheduledSummary();
-        }, 1000);
-      }
-    } catch (error) {
-      console.error("Error generating schedule:", error);
-      toast.error(
-        error.response?.data?.message || "Failed to generate schedule",
-      );
-
-      setResults({
-        success: false,
-        error: error.response?.data?.message || "Generation failed",
-      });
-    } finally {
-      setGenerating(false);
-    }
+    setShowFailureDetails(false);
+    runGeneration(selectedReceivers, startDate, endDate);
   };
 
   // Calculate date range info
@@ -348,11 +278,43 @@ function GenerateSchedule() {
         </div>
 
         {/* ========================================
-            NEW: Check Unscheduled Button
+            Last check info box (when available)
             ======================================== */}
-        <div className="flex justify-end">
+        {unscheduledSummary?.lastCheckedAt && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-semibold mb-1">Last unscheduled check</p>
+                <p>
+                  Run at{" "}
+                  <strong>
+                    {moment(unscheduledSummary.lastCheckedAt).format(
+                      "h:mm A, D MMM YYYY"
+                    )}
+                  </strong>{" "}
+                  ({moment(unscheduledSummary.lastCheckedAt).fromNow()})
+                  {lastCheck?.startDate &&
+                    lastCheck?.endDate &&
+                    ` · Results for ${moment(lastCheck.startDate).format("MMM D")} – ${moment(lastCheck.endDate).format("MMM D, YYYY")}`}
+                  .
+                </p>
+                {!rangeMatches && (
+                  <p className="mt-1 text-amber-700">
+                    Date range has changed – check again for current range.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================
+            Check Unscheduled Button
+            ======================================== */}
+        <div className="flex justify-end items-center gap-3">
           <button
-            onClick={loadUnscheduledSummary}
+            onClick={handleCheckUnscheduled}
             disabled={loading}
             className="btn-primary flex items-center gap-2"
           >
@@ -364,7 +326,7 @@ function GenerateSchedule() {
             ) : (
               <>
                 <Search className="h-5 w-5" />
-                Check Unscheduled Appointments
+                {hasChecked ? "Check Again" : "Check Unscheduled Appointments"}
               </>
             )}
           </button>
@@ -517,7 +479,14 @@ function GenerateSchedule() {
       {/* Results */}
       {results && (
         <div className="mt-8 card">
-          <h2 className="text-xl font-semibold mb-4">Generation Results</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Generation Results</h2>
+            {lastGeneration?.completedAt && (
+              <span className="text-sm text-gray-500">
+                Last run {moment(lastGeneration.completedAt).fromNow()}
+              </span>
+            )}
+          </div>
 
           {results.success ? (
             <>
@@ -595,9 +564,7 @@ function GenerateSchedule() {
                 </button>
                 <button
                   onClick={() => {
-                    setResults(null);
-                    setHasChecked(false);
-                    setUnscheduledSummary(null);
+                    clearLastGeneration();
                     setSelectedReceivers([]);
                     setShowFailureDetails(false);
                   }}

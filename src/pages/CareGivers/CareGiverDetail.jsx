@@ -19,10 +19,12 @@ import {
   XCircle,
 } from "lucide-react";
 import { careGiverService } from "../../services/careGiverService";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function CareGiverDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const confirmDialog = useConfirmDialog();
   const [careGiver, setCareGiver] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -46,9 +48,13 @@ function CareGiverDetail() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Are you sure you want to delete ${careGiver.name}?`)) {
-      return;
-    }
+    const ok = await confirmDialog.confirm({
+      title: "Delete care giver?",
+      message: `Are you sure you want to delete ${careGiver.name}?`,
+      variant: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
 
     try {
       await careGiverService.delete(id);

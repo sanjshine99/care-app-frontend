@@ -20,10 +20,12 @@ import {
 } from "lucide-react";
 import { careReceiverService } from "../../services/careReceiverService";
 import api from "../../services/api";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function CareReceiverDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const confirmDialog = useConfirmDialog();
   const [careReceiver, setCareReceiver] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSuitableCareGivers, setShowSuitableCareGivers] = useState(false);
@@ -76,11 +78,13 @@ function CareReceiverDetail() {
   };
 
   const handleDelete = async () => {
-    if (
-      !window.confirm(`Are you sure you want to delete ${careReceiver.name}?`)
-    ) {
-      return;
-    }
+    const ok = await confirmDialog.confirm({
+      title: "Delete care receiver?",
+      message: `Are you sure you want to delete ${careReceiver.name}?`,
+      variant: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
 
     try {
       await careReceiverService.delete(id);

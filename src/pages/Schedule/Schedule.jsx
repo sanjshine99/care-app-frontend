@@ -19,6 +19,7 @@ import CalendarView from "./CalendarView";
 import UnscheduledList from "./UnscheduledList";
 import NeedsReassignment from "./NeedsReassignment";
 import api from "../../services/api";
+import { useUnscheduledCheck } from "../../contexts/UnscheduledCheckContext";
 
 // ========================================
 //  FIXED: Date formatting helper to prevent timezone offset bug
@@ -46,11 +47,13 @@ const formatDateForAPI = (date) => {
 
 function Schedule() {
   const navigate = useNavigate();
+  const { lastCheck, isChecking, runCheck } = useUnscheduledCheck();
   const [appointments, setAppointments] = useState([]);
-  const [unscheduled, setUnscheduled] = useState([]);
   const [needsReassignment, setNeedsReassignment] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [unscheduledLoading, setUnscheduledLoading] = useState(false);
+
+  const unscheduled = lastCheck?.data?.unscheduled ?? [];
+  const unscheduledLoading = isChecking;
   const [validating, setValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("calendar");
   // FIXED: Default to current month (not just today forward) to show past appointments
@@ -78,11 +81,19 @@ function Schedule() {
   // ========================================
   useEffect(() => {
     if (activeTab === "unscheduled") {
-      loadUnscheduled();
+      const startStr = formatDateForAPI(dateRange.start);
+      const endStr = formatDateForAPI(dateRange.end);
+      if (
+        !lastCheck ||
+        lastCheck.startDate !== startStr ||
+        lastCheck.endDate !== endStr
+      ) {
+        runCheck(startStr, endStr);
+      }
     } else if (activeTab === "needs_reassignment") {
       loadNeedsReassignment();
     }
-  }, [activeTab, dateRange, refreshTrigger]);
+  }, [activeTab, dateRange, refreshTrigger, lastCheck?.startDate, lastCheck?.endDate]);
 
   const loadAppointments = async () => {
     setLoading(true);
@@ -112,36 +123,6 @@ function Schedule() {
       toast.error("Failed to load appointments");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadUnscheduled = async () => {
-    setUnscheduledLoading(true);
-
-    try {
-      const response = await api.get("/schedule/unscheduled", {
-        params: {
-          startDate: formatDateForAPI(dateRange.start), //  FIXED
-          endDate: formatDateForAPI(dateRange.end), //  FIXED
-        },
-      });
-
-      if (response.data.success) {
-        let data = [];
-        if (response.data.data?.unscheduled) {
-          data = response.data.data.unscheduled;
-        } else if (Array.isArray(response.data.data)) {
-          data = response.data.data;
-        }
-
-        setUnscheduled(data);
-      }
-    } catch (error) {
-      console.error("Error loading unscheduled:", error);
-      setUnscheduled([]);
-      toast.error("Failed to load unscheduled appointments");
-    } finally {
-      setUnscheduledLoading(false);
     }
   };
 
@@ -227,14 +208,15 @@ function Schedule() {
   const handleRefresh = async () => {
     console.log("🔄 Refresh with validation");
 
-    // First, validate the schedule
     await handleValidateSchedule();
 
-    // Then refresh current tab data
     if (activeTab === "calendar") {
       toast.success("Refreshing appointments...");
     } else if (activeTab === "unscheduled") {
-      toast.success("Refreshing...");
+      runCheck(
+        formatDateForAPI(dateRange.start),
+        formatDateForAPI(dateRange.end),
+      );
     } else {
       toast.success("Refreshing conflicts...");
     }
@@ -319,9 +301,14 @@ function Schedule() {
   };
 
   const handleManualScheduleSuccess = () => {
-    console.log(" Manual schedule success");
     setRefreshTrigger((prev) => prev + 1);
     toast.success("Appointment scheduled! Refreshing...");
+    if (activeTab === "unscheduled") {
+      runCheck(
+        formatDateForAPI(dateRange.start),
+        formatDateForAPI(dateRange.end),
+      );
+    }
   };
 
   const handleTabChange = (tab) => {
