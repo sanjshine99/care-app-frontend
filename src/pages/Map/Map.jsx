@@ -1,5 +1,4 @@
 // frontend/src/pages/Map/Map.jsx
-// FIXED - Proper map initialization order to prevent errors
 
 import { useState, useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
@@ -27,10 +26,11 @@ function Map() {
   const map = useRef(null);
   const markers = useRef([]);
   const updateMarkersRef = useRef(null);
+  const hasFitBounds = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [mapReady, setMapReady] = useState(false); // NEW: Track map ready state
+  const [mapReady, setMapReady] = useState(false);
   const [locations, setLocations] = useState({
     careGivers: [],
     careReceivers: [],
@@ -49,9 +49,9 @@ function Map() {
     "mapbox://styles/mapbox/streets-v12",
   );
 
-  // Default center (London, UK)
-  const defaultCenter = { lng: -0.1276, lat: 51.5074 };
-  const defaultZoom = 10;
+  // Fallback center (middle of England) — overridden immediately by fitMapToBounds once data loads
+  const defaultCenter = { lng: -1.5, lat: 52.5 };
+  const defaultZoom = 7;
 
   // Initialize map only once
   useEffect(() => {
@@ -95,9 +95,17 @@ function Map() {
   }, []);
 
   // Update markers when locations or filters change (ONLY if map is ready)
+  // Also auto-fit to data on the very first load, regardless of which arrives first
   useEffect(() => {
     if (mapReady && map.current) {
       updateMarkers();
+      if (
+        !hasFitBounds.current &&
+        (locations.careGivers.length > 0 || locations.careReceivers.length > 0)
+      ) {
+        fitMapToBounds(locations);
+        hasFitBounds.current = true;
+      }
     }
   }, [locations, filters, mapReady]);
 
@@ -114,17 +122,15 @@ function Map() {
         setLocations(locs);
         setStats(st);
 
-        // Fit map to show all locations (only if map is ready)
+        // On manual refresh, re-fit bounds to updated data
         if (
+          showToast &&
           mapReady &&
           map.current &&
           (locs.careGivers.length > 0 || locs.careReceivers.length > 0)
         ) {
           fitMapToBounds(locs);
-        }
-
-        if (showToast) {
-          toast.success("📍 Locations refreshed successfully!");
+          toast.success("Locations refreshed successfully!");
         }
       }
     } catch (error) {
