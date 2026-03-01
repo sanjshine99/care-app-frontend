@@ -71,6 +71,10 @@ function CareGiverForm() {
           singleHandedOnly: cg.singleHandedOnly || false,
           notes: cg.notes || '',
         });
+        const loadedPostcode = (cg.address?.postcode || '').trim();
+        if (loadedPostcode) {
+          validatePostcode(loadedPostcode.toUpperCase());
+        }
       }
     } catch (error) {
       toast.error('Failed to load care giver');
