@@ -27,10 +27,34 @@ function ConfirmDialog({
 
   useEffect(() => {
     if (!open) return;
+    const focusableSelector =
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
+        return;
+      }
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusables = Array.from(
+          dialogRef.current.querySelectorAll(focusableSelector)
+        );
+        if (focusables.length === 0) return;
+        e.preventDefault();
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const currentIndex = focusables.indexOf(document.activeElement);
+        if (e.shiftKey) {
+          const nextIndex =
+            currentIndex <= 0 ? focusables.length - 1 : currentIndex - 1;
+          focusables[nextIndex].focus();
+        } else {
+          const nextIndex =
+            currentIndex === -1 || currentIndex >= focusables.length - 1
+              ? 0
+              : currentIndex + 1;
+          focusables[nextIndex].focus();
+        }
       }
     };
     document.addEventListener("keydown", handleKeyDown);
