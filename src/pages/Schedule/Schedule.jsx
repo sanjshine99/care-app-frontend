@@ -51,9 +51,6 @@ function Schedule() {
   const [appointments, setAppointments] = useState([]);
   const [needsReassignment, setNeedsReassignment] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  const unscheduled = lastCheck?.data?.unscheduled ?? [];
-  const unscheduledLoading = isChecking;
   const [validating, setValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("calendar");
   // FIXED: Default to current month (not just today forward) to show past appointments
@@ -67,6 +64,17 @@ function Schedule() {
     };
   });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const currentStartDate = formatDateForAPI(dateRange.start);
+  const currentEndDate = formatDateForAPI(dateRange.end);
+  const lastCheckMatchesRange =
+    lastCheck &&
+    lastCheck.startDate === currentStartDate &&
+    lastCheck.endDate === currentEndDate;
+  const unscheduled = lastCheckMatchesRange
+    ? (lastCheck?.data?.unscheduled ?? [])
+    : [];
+  const unscheduledLoading = isChecking;
 
   // ========================================
   // LOAD APPOINTMENTS
