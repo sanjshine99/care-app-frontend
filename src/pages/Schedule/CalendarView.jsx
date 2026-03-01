@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function CalendarView({
   appointments,
@@ -24,6 +25,7 @@ function CalendarView({
   onRefresh,
   loading,
 }) {
+  const confirmDialog = useConfirmDialog();
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
@@ -116,9 +118,13 @@ function CalendarView({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete this appointment?")) {
-      return;
-    }
+    const ok = await confirmDialog.confirm({
+      title: "Delete appointment?",
+      message: "Are you sure you want to delete this appointment?",
+      variant: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
 
     try {
       await api.delete(`/schedule/appointments/${selectedEvent._id}`);

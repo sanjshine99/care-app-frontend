@@ -6,6 +6,7 @@ import { X, User, Phone, MapPin, Clock, CheckCircle, Star } from "lucide-react";
 import moment from "moment";
 import api from "../services/api";
 import { toast } from "react-toastify";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function AppointmentDetails({
   appointment,
@@ -13,6 +14,7 @@ function AppointmentDetails({
   onStatusUpdate,
   onDelete,
 }) {
+  const confirmDialog = useConfirmDialog();
   const [assignmentReasoning, setAssignmentReasoning] = useState(null);
   const [loadingReasoning, setLoadingReasoning] = useState(true);
 
@@ -60,9 +62,13 @@ function AppointmentDetails({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete this appointment?")) {
-      return;
-    }
+    const ok = await confirmDialog.confirm({
+      title: "Delete appointment?",
+      message: "Are you sure you want to delete this appointment?",
+      variant: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
 
     try {
       // FIXED: Removed /api/ prefix

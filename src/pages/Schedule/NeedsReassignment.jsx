@@ -16,11 +16,13 @@ import { toast } from "react-toastify";
 import ManualScheduleModal from "./ManualScheduleModal";
 import api from "../../services/api";
 import { getSkillLabel } from "../../constants/skills";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [cancelling, setCancelling] = useState(null);
+  const confirmDialog = useConfirmDialog();
 
   // Handle reassign button click
   const handleReassign = (appointment) => {
@@ -30,9 +32,13 @@ function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
 
   // Handle cancel appointment
   const handleCancel = async (appointmentId) => {
-    if (!window.confirm("Are you sure you want to cancel this appointment?")) {
-      return;
-    }
+    const ok = await confirmDialog.confirm({
+      title: "Cancel appointment?",
+      message: "Are you sure you want to cancel this appointment?",
+      variant: "danger",
+      confirmLabel: "Cancel appointment",
+    });
+    if (!ok) return;
 
     setCancelling(appointmentId);
     try {

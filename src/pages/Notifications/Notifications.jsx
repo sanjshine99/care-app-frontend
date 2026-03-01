@@ -20,9 +20,11 @@ import {
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function Notifications() {
   const navigate = useNavigate();
+  const confirmDialog = useConfirmDialog();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
@@ -117,9 +119,17 @@ function Notifications() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this notification?")) {
+    if (!confirmDialog?.confirm) {
+      toast.error("Unable to confirm action");
       return;
     }
+    const ok = await confirmDialog.confirm({
+      title: "Delete notification?",
+      message: "Are you sure you want to delete this notification?",
+      variant: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
 
     try {
       await api.delete(`/notifications/${id}`);

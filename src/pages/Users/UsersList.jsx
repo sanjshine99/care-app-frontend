@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, KeyRound, Copy, X } from 'lucide-react';
 import { userService } from '../../services/userService';
 import { toast } from 'react-toastify';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 function buildCredentialMessage(email, temporaryPassword) {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
@@ -12,6 +13,7 @@ function buildCredentialMessage(email, temporaryPassword) {
 
 function UsersList() {
   const navigate = useNavigate();
+  const confirmDialog = useConfirmDialog();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -59,9 +61,12 @@ function UsersList() {
   };
 
   const handleResetPassword = async (user) => {
-    if (!window.confirm(`Generate a new temporary password for ${user.name}? They will need to be sent the new credentials.`)) {
-      return;
-    }
+    const ok = await confirmDialog.confirm({
+      title: 'Generate temporary password?',
+      message: `Generate a new temporary password for ${user.name}? They will need to be sent the new credentials.`,
+      confirmLabel: 'Generate password',
+    });
+    if (!ok) return;
     try {
       const response = await userService.resetPassword(user._id);
       if (response?.success && response?.data?.temporaryPassword) {

@@ -3,6 +3,9 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import { AuthProvider } from "./contexts/AuthContext";
+import { UnscheduledCheckProvider } from "./contexts/UnscheduledCheckContext";
+import { ScheduleGenerationProvider } from "./contexts/ScheduleGenerationContext";
+import { ConfirmDialogProvider } from "./contexts/ConfirmDialogContext";
 import MainLayout from "./components/Layout/MainLayout";
 import Login from "./pages/Auth/Login";
 import Dashboard from "./pages/Dashboard/Dashboard";
@@ -37,6 +40,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <UnscheduledCheckProvider>
+        <ConfirmDialogProvider>
+        <ScheduleGenerationProvider>
         <Routes>
           {/* Public routes */}
           <Route
@@ -110,6 +116,9 @@ function App() {
           draggable
           pauseOnHover
         />
+        </ScheduleGenerationProvider>
+        </ConfirmDialogProvider>
+        </UnscheduledCheckProvider>
       </AuthProvider>
     </BrowserRouter>
   );

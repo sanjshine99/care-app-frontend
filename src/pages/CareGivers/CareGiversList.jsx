@@ -4,9 +4,11 @@ import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
 import { careGiverService } from "../../services/careGiverService";
 import { toast } from "react-toastify";
 import { Calendar } from "lucide-react";
+import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 function CareGiversList() {
   const navigate = useNavigate();
+  const confirmDialog = useConfirmDialog();
   const [careGivers, setCareGivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -48,16 +50,21 @@ function CareGiversList() {
   };
 
   const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete ${name}?`)) {
-      try {
-        await careGiverService.delete(id);
-        toast.success("Care giver deleted successfully");
-        loadCareGivers();
-      } catch (error) {
-        const message =
-          error.response?.data?.error?.message || "Failed to delete care giver";
-        toast.error(message);
-      }
+    const ok = await confirmDialog.confirm({
+      title: "Delete care giver?",
+      message: `Are you sure you want to delete ${name}?`,
+      variant: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    try {
+      await careGiverService.delete(id);
+      toast.success("Care giver deleted successfully");
+      loadCareGivers();
+    } catch (error) {
+      const message =
+        error.response?.data?.error?.message || "Failed to delete care giver";
+      toast.error(message);
     }
   };
 

@@ -4,6 +4,7 @@ import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react';
 import { careReceiverService } from '../../services/careReceiverService';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
+import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
 const SCHEDULE_POLL_INTERVAL_MS = 4000;
 const SCHEDULE_POLL_DURATION_MS = 90000;
@@ -11,6 +12,7 @@ const SCHEDULE_POLL_DURATION_MS = 90000;
 function CareReceiversList() {
   const navigate = useNavigate();
   const location = useLocation();
+  const confirmDialog = useConfirmDialog();
   const [careReceivers, setCareReceivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -84,14 +86,19 @@ function CareReceiversList() {
   };
 
   const handleDelete = async (id, name) => {
-    if (window.confirm('Are you sure you want to delete ' + name + '?')) {
-      try {
-        await careReceiverService.delete(id);
-        toast.success('Care receiver deleted successfully');
-        loadCareReceivers(pagination.page);
-      } catch (error) {
-        toast.error(error.response?.data?.error?.message || 'Failed to delete care receiver');
-      }
+    const ok = await confirmDialog.confirm({
+      title: 'Delete care receiver?',
+      message: `Are you sure you want to delete ${name}?`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await careReceiverService.delete(id);
+      toast.success('Care receiver deleted successfully');
+      loadCareReceivers(pagination.page);
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to delete care receiver');
     }
   };
 
