@@ -53,14 +53,12 @@ function Schedule() {
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("calendar");
-  // FIXED: Default to current month (not just today forward) to show past appointments
   const [dateRange, setDateRange] = useState(() => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startOfWeek = moment().startOf("week").toDate();
+    const endOfWeek = moment().endOf("week").toDate();
     return {
-      start: startOfMonth,
-      end: endOfMonth,
+      start: startOfWeek,
+      end: endOfWeek,
     };
   });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -247,6 +245,45 @@ function Schedule() {
       `Showing appointments from ${moment(dateRange.start).format("MMM D")} to ${moment(dateRange.end).format("MMM D, YYYY")}`,
     );
   };
+
+  const getQuickRangeForRange = (startDate, endDate) => {
+    const start = moment(startDate);
+    const end = moment(endDate);
+    if (
+      start.isSame(moment().startOf("day"), "day") &&
+      end.isSame(moment().endOf("day"), "day")
+    )
+      return "today";
+    if (
+      start.isSame(moment().startOf("week"), "day") &&
+      end.isSame(moment().endOf("week"), "day")
+    )
+      return "this_week";
+    if (
+      start.isSame(moment().startOf("month"), "day") &&
+      end.isSame(moment().endOf("month"), "day")
+    )
+      return "this_month";
+    if (
+      start.isSame(
+        moment().subtract(1, "month").startOf("month"),
+        "day",
+      ) &&
+      end.isSame(
+        moment().subtract(1, "month").endOf("month"),
+        "day",
+      )
+    )
+      return "last_month";
+    if (
+      start.isSame(moment().subtract(90, "days").startOf("day"), "day") &&
+      end.isSame(moment().add(30, "days").endOf("day"), "day")
+    )
+      return "all_time";
+    return null;
+  };
+
+  const activeQuickRange = getQuickRangeForRange(dateRange.start, dateRange.end);
 
   const handleQuickRange = (range) => {
     let start;
@@ -442,31 +479,51 @@ function Schedule() {
         <div className="flex flex-wrap gap-2 mb-4">
           <button
             onClick={() => handleQuickRange("today")}
-            className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              activeQuickRange === "today"
+                ? "bg-blue-600 text-white ring-2 ring-blue-400 ring-offset-1"
+                : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+            }`}
           >
             Today
           </button>
           <button
             onClick={() => handleQuickRange("this_week")}
-            className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              activeQuickRange === "this_week"
+                ? "bg-green-600 text-white ring-2 ring-green-400 ring-offset-1"
+                : "bg-green-100 text-green-700 hover:bg-green-200"
+            }`}
           >
             This Week
           </button>
           <button
             onClick={() => handleQuickRange("this_month")}
-            className="px-3 py-1.5 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              activeQuickRange === "this_month"
+                ? "bg-purple-600 text-white ring-2 ring-purple-400 ring-offset-1"
+                : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+            }`}
           >
             This Month
           </button>
           <button
             onClick={() => handleQuickRange("last_month")}
-            className="px-3 py-1.5 text-sm bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              activeQuickRange === "last_month"
+                ? "bg-orange-600 text-white ring-2 ring-orange-400 ring-offset-1"
+                : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+            }`}
           >
             Last Month
           </button>
           <button
             onClick={() => handleQuickRange("all_time")}
-            className="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200"
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              activeQuickRange === "all_time"
+                ? "bg-indigo-600 text-white ring-2 ring-indigo-400 ring-offset-1"
+                : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+            }`}
           >
             Last 90 Days
           </button>
