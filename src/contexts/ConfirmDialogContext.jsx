@@ -27,6 +27,9 @@ export function ConfirmDialogProvider({ children }) {
   const confirm = useCallback(
     ({ title, message, confirmLabel, cancelLabel, variant }) => {
       return new Promise((resolve) => {
+        if (resolveRef.current) {
+          resolveRef.current(false);
+        }
         resolveRef.current = resolve;
         setState({
           open: true,

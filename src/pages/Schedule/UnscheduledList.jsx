@@ -2,32 +2,85 @@
 // FIXED - Uses correct endpoints and opens ManualScheduleModal
 
 import { useState } from "react";
-import { AlertTriangle, User, Clock, X } from "lucide-react";
+import { AlertTriangle, User, Clock, X, RefreshCw } from "lucide-react";
 import moment from "moment";
 import api from "../../services/api";
 import { toast } from "react-toastify";
 import { getSkillLabel } from "../../constants/skills";
 import ManualScheduleModal from "./ManualScheduleModal";
 
+function formatTimeToHHMM(timeStr) {
+  if (!timeStr) return timeStr;
+  const parts = String(timeStr).split(":");
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) || 0;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function getAnalyzingKey(detail, careReceiver) {
+  if (!detail || !careReceiver?.id) return null;
+  const dateStr =
+    typeof detail.date === "string"
+      ? detail.date
+      : moment(detail.date).format("YYYY-MM-DD");
+  return `${careReceiver.id}-${dateStr}-${detail.visitNumber}`;
+}
+
 function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showManualScheduleModal, setShowManualScheduleModal] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzingKey, setAnalyzingKey] = useState(null);
 
-  // View full details with correct endpoint
-  const handleViewDetails = async (detail, careReceiver) => {
+  const refreshAnalysis = async () => {
+    if (!selectedAppointment?.careReceiver) return;
+    const key = getAnalyzingKey(selectedAppointment, selectedAppointment.careReceiver);
+    if (!key) return;
     try {
-      setAnalyzing(true);
+      setAnalyzingKey(key);
+      const dateStr =
+        typeof selectedAppointment.date === "string"
+          ? selectedAppointment.date
+          : moment(selectedAppointment.date).format("YYYY-MM-DD");
+      const payload = {
+        careReceiver: selectedAppointment.careReceiver.id,
+        visit: {
+          visitNumber: selectedAppointment.visitNumber,
+          preferredTime: formatTimeToHHMM(selectedAppointment.preferredTime),
+          duration: selectedAppointment.duration,
+          requirements: selectedAppointment.requirements || [],
+          doubleHanded: selectedAppointment.doubleHanded || false,
+          priority: selectedAppointment.priority || 3,
+          notes: selectedAppointment.notes || "",
+        },
+        date: dateStr,
+      };
+      const response = await api.post("/schedule/analyze-unscheduled", payload);
+      setSelectedAppointment((prev) => ({
+        ...prev,
+        analysisResults: response.data.data,
+      }));
+      toast.success("Analysis refreshed");
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.error?.message || "Failed to refresh analysis";
+      toast.error(errorMessage);
+    } finally {
+      setAnalyzingKey(null);
+    }
+  };
 
-      console.log("\n=== Analyzing Unscheduled Appointment ===");
+  const handleViewDetails = async (detail, careReceiver) => {
+    const key = getAnalyzingKey(detail, careReceiver);
+    if (!key) return;
+    try {
+      setAnalyzingKey(key);
 
-      // Build payload
       const payload = {
         careReceiver: careReceiver.id,
         visit: {
           visitNumber: detail.visitNumber,
-          preferredTime: detail.preferredTime,
+          preferredTime: formatTimeToHHMM(detail.preferredTime),
           duration: detail.duration,
           requirements: detail.requirements || [],
           doubleHanded: detail.doubleHanded || false,
@@ -37,12 +90,7 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
         date: detail.date,
       };
 
-      console.log("Payload:", payload);
-
-      // Call analyze endpoint
       const response = await api.post("/schedule/analyze-unscheduled", payload);
-
-      console.log("Analysis response:", response.data);
 
       setSelectedAppointment({
         ...detail,
@@ -50,14 +98,13 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
         analysisResults: response.data.data,
       });
       setShowDetailsModal(true);
-      setAnalyzing(false);
     } catch (error) {
-      console.error("Analysis error:", error);
       const errorMessage =
         error.response?.data?.error?.message ||
         "Failed to load detailed analysis";
       toast.error(errorMessage);
-      setAnalyzing(false);
+    } finally {
+      setAnalyzingKey(null);
     }
   };
 
@@ -102,65 +149,69 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
 
             {/* Details */}
             {group.details &&
-              group.details.map((detail, detailIndex) => (
-                <div
-                  key={`${groupIndex}-${detailIndex}`}
-                  className="border border-amber-300 bg-amber-50 rounded-lg p-4 ml-8"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="space-y-1 text-sm text-gray-700">
-                        <p className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          {moment(detail.date).format("YYYY-MM-DD")} - Visit{" "}
-                          {detail.visitNumber}
-                        </p>
-                        <p className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          Time: {detail.preferredTime} ({detail.duration}{" "}
-                          minutes)
-                        </p>
-                        {detail.reason && (
-                          <p className="text-amber-700 font-medium mt-2">
-                            {detail.reason}
+              group.details.map((detail, detailIndex) => {
+                const rowKey = getAnalyzingKey(detail, group.careReceiver);
+                const isAnalyzing = analyzingKey === rowKey;
+                return (
+                  <div
+                    key={`${groupIndex}-${detailIndex}`}
+                    className="border border-amber-300 bg-amber-50 rounded-lg p-4 ml-8"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="space-y-1 text-sm text-gray-700">
+                          <p className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            {moment(detail.date).format("YYYY-MM-DD")} - Visit{" "}
+                            {detail.visitNumber}
                           </p>
-                        )}
+                          <p className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            Time: {detail.preferredTime} ({detail.duration}{" "}
+                            minutes)
+                          </p>
+                          {detail.reason && (
+                            <p className="text-amber-700 font-medium mt-2">
+                              {detail.reason}
+                            </p>
+                          )}
+                        </div>
+
+                        {detail.requirements &&
+                          detail.requirements.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-xs text-gray-600 mb-1">
+                                Required Skills:
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {detail.requirements.map((skill, i) => (
+                                  <span
+                                    key={i}
+                                    className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded"
+                                  >
+                                    {getSkillLabel(skill)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                       </div>
 
-                      {detail.requirements &&
-                        detail.requirements.length > 0 && (
-                          <div className="mt-2">
-                            <p className="text-xs text-gray-600 mb-1">
-                              Required Skills:
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {detail.requirements.map((skill, i) => (
-                                <span
-                                  key={i}
-                                  className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded"
-                                >
-                                  {getSkillLabel(skill)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                    </div>
-
-                    <div className="flex gap-2 ml-4">
-                      <button
-                        onClick={() =>
-                          handleViewDetails(detail, group.careReceiver)
-                        }
-                        disabled={analyzing}
-                        className="btn-secondary text-xs flex items-center gap-2"
-                      >
-                        {analyzing ? "Loading..." : "Full Analysis"}
-                      </button>
+                      <div className="flex gap-2 ml-4">
+                        <button
+                          onClick={() =>
+                            handleViewDetails(detail, group.careReceiver)
+                          }
+                          disabled={isAnalyzing}
+                          className="btn-secondary text-xs flex items-center gap-2"
+                        >
+                          {isAnalyzing ? "Loading..." : "Full Analysis"}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         ))
       )}
@@ -173,12 +224,35 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
               <h2 className="text-2xl font-bold">
                 Unscheduled Appointment Analysis
               </h2>
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const selectedKey = getAnalyzingKey(
+                    selectedAppointment,
+                    selectedAppointment?.careReceiver,
+                  );
+                  const isRefreshing = analyzingKey === selectedKey;
+                  return (
+                    <button
+                      onClick={refreshAnalysis}
+                      disabled={isRefreshing}
+                      className="btn-secondary text-sm flex items-center gap-2"
+                      title="Refresh analysis with latest data"
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                      />
+                      Refresh analysis
+                    </button>
+                  );
+                })()}
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="Close"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
             </div>
 
             {/* Appointment Details */}
@@ -355,14 +429,18 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
           }}
           visit={{
             visitNumber: selectedAppointment.visitNumber,
-            preferredTime: selectedAppointment.preferredTime,
+            preferredTime: formatTimeToHHMM(selectedAppointment.preferredTime),
             duration: selectedAppointment.duration,
             requirements: selectedAppointment.requirements || [],
             doubleHanded: selectedAppointment.doubleHanded || false,
             priority: selectedAppointment.priority || 3,
             notes: selectedAppointment.notes || "",
           }}
-          date={selectedAppointment.date}
+          date={
+            typeof selectedAppointment.date === "string"
+              ? selectedAppointment.date
+              : moment(selectedAppointment.date).format("YYYY-MM-DD")
+          }
           onClose={() => setShowManualScheduleModal(false)}
           onSuccess={handleManualScheduleSuccess}
         />
