@@ -92,6 +92,31 @@ export function ScheduleGenerationProvider({ children }) {
               (failed > 0 ? `, ${failed} could not be scheduled` : "") + ".",
             { autoClose: 5000 }
           );
+        } else {
+          const summary = response.data.data?.summary ?? {};
+          const errorMessage =
+            response.data.error ??
+            response.data.message ??
+            "Generation failed";
+          const payload = {
+            completedAt: Date.now(),
+            careReceiverIds,
+            startDate,
+            endDate,
+            success: false,
+            summary: {
+              totalScheduled: summary.totalScheduled ?? 0,
+              totalFailed: summary.totalFailed ?? 0,
+              careReceiversProcessed: summary.careReceiversProcessed ?? 0,
+            },
+            results: response.data.data?.results ?? [],
+            error: errorMessage,
+          };
+          setLastGeneration(payload);
+          saveToStorage(payload);
+          toast.error(`Schedule generation failed. ${errorMessage}`, {
+            autoClose: 5000,
+          });
         }
       })
       .catch((err) => {

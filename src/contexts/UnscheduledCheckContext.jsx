@@ -88,7 +88,9 @@ export function UnscheduledCheckProvider({ children }) {
         }
       })
       .catch(() => {
-        toast.error("Unscheduled check failed – try again.");
+        if (!silent) {
+          toast.error("Unscheduled check failed – try again.");
+        }
       })
       .finally(() => {
         setIsChecking(false);
