@@ -2,7 +2,7 @@
 // FIXED - Defaults to CURRENT MONTH instead of current week
 // Shows all appointments including old ones
 
-import { useState, useEffect } from "react";
+import { memo, useState, useEffect } from "react";
 import moment from "moment";
 import {
   X,
@@ -552,4 +552,4 @@ function CalendarView({
   );
 }
 
-export default CalendarView;
+export default memo(CalendarView);

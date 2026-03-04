@@ -6,8 +6,8 @@ import api from '../../services/api';
 import { toast } from 'react-toastify';
 import { useConfirmDialog } from '../../contexts/ConfirmDialogContext';
 
-const SCHEDULE_POLL_INTERVAL_MS = 4000;
-const SCHEDULE_POLL_DURATION_MS = 90000;
+const SCHEDULE_POLL_INTERVAL_MS = 8000;  // reduced from 4s to 8s — halves network requests
+const SCHEDULE_POLL_DURATION_MS = 60000; // reduced from 90s to 60s — max 7 requests per action
 
 function CareReceiversList() {
   const navigate = useNavigate();
@@ -29,12 +29,15 @@ function CareReceiversList() {
 
     const idStr = String(careReceiverId);
     let elapsed = 0;
+    let abortController = null;
 
     const poll = async () => {
       if (elapsed >= SCHEDULE_POLL_DURATION_MS) return;
       try {
+        abortController = new AbortController();
         const res = await api.get('/notifications', {
           params: { limit: 20, sortBy: 'createdAt', sortOrder: 'desc' },
+          signal: abortController.signal,
         });
         const list = res?.data?.data?.notifications ?? [];
         const match = list.find(
@@ -56,8 +59,9 @@ function CareReceiversList() {
           navigate('/carereceivers', { replace: true, state: {} });
           return;
         }
-      } catch (_) {
-        // ignore
+      } catch (err) {
+        // Ignore AbortError (component unmounted) and other transient errors
+        if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
       }
       elapsed += SCHEDULE_POLL_INTERVAL_MS;
       schedulePollTimeoutRef.current = setTimeout(poll, SCHEDULE_POLL_INTERVAL_MS);
@@ -67,6 +71,9 @@ function CareReceiversList() {
     return () => {
       if (schedulePollTimeoutRef.current) {
         clearTimeout(schedulePollTimeoutRef.current);
+      }
+      if (abortController) {
+        abortController.abort();
       }
     };
   }, [location.state?.scheduleGenerationQueued, location.state?.careReceiverId, navigate]);

@@ -116,6 +116,7 @@ function CareReceiverForm() {
             recurrencePattern: visit.recurrencePattern || "weekly",
             recurrenceInterval: visit.recurrenceInterval || 1,
             recurrenceStartDate: visit.recurrenceStartDate || null,
+            bufferFlexibilityMinutes: visit.bufferFlexibilityMinutes ?? 0,
           }));
         }
 
@@ -224,6 +225,7 @@ function CareReceiverForm() {
       recurrencePattern: "weekly",
       recurrenceInterval: 1,
       recurrenceStartDate: null,
+      bufferFlexibilityMinutes: 0,
     };
     setFormData((prev) => ({
       ...prev,
@@ -916,6 +918,36 @@ function CareReceiverForm() {
                           </p>
                         )}
                       </div>
+                    </div>
+
+                    {/* Arrival window (travel buffer consent) */}
+                    <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200">
+                      <label
+                        htmlFor={`visit-${index}-bufferFlexibilityMinutes`}
+                        className="block text-sm font-medium text-gray-700 mb-2"
+                      >
+                        Arrival window (travel buffer consent)
+                      </label>
+                      <input
+                        id={`visit-${index}-bufferFlexibilityMinutes`}
+                        type="number"
+                        min="0"
+                        max="60"
+                        value={visit.bufferFlexibilityMinutes ?? 0}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          const clamped = Number.isNaN(v)
+                            ? 0
+                            : Math.min(60, Math.max(0, v));
+                          updateDailyVisit(index, "bufferFlexibilityMinutes", clamped);
+                        }}
+                        className="input w-24"
+                      />
+                      <p className="text-xs text-gray-600 mt-2">
+                        I accept that my caregiver may arrive up to this many minutes before or
+                        after my preferred time, to allow travel from previous appointments.
+                        This can enable more automatic assignments. (0–60 minutes)
+                      </p>
                     </div>
 
                     {/* Requirements */}

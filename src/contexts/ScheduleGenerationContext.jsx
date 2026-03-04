@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
+import { io } from "socket.io-client";
 import api from "../services/api";
+import { queryClient } from "../lib/queryClient";
 import { useUnscheduledCheck } from "./UnscheduledCheckContext";
 
 const STORAGE_KEY = "scheduleGenerationResult";
@@ -60,6 +62,12 @@ export function ScheduleGenerationProvider({ children }) {
     }
     setIsGenerating(true);
 
+    const finishWithPayload = (payload) => {
+      setLastGeneration(payload);
+      saveToStorage(payload);
+      setIsGenerating(false);
+    };
+
     api
       .post("/schedule/generate", {
         careReceiverIds,
@@ -67,6 +75,85 @@ export function ScheduleGenerationProvider({ children }) {
         endDate,
       })
       .then((response) => {
+        const jobId = response.data?.data?.jobId;
+        const isQueued = response.status === 202 && jobId;
+
+        if (isQueued) {
+          const POLL_INTERVAL_MS = 2500;
+          const pollJob = () => {
+            api
+              .get(`/schedule/jobs/${jobId}`)
+              .then((jobRes) => {
+                const data = jobRes.data?.data;
+                const status = data?.status;
+                if (status === "completed") {
+                  const summary = data?.resultSummary ?? {};
+                  const payload = {
+                    completedAt: Date.now(),
+                    careReceiverIds,
+                    startDate,
+                    endDate,
+                    success: true,
+                    summary: {
+                      totalScheduled: summary.totalScheduled ?? 0,
+                      totalFailed: summary.totalFailed ?? 0,
+                      careReceiversProcessed: summary.careReceiversProcessed ?? 0,
+                    },
+                    results: summary.results ?? [],
+                    error: null,
+                  };
+                  finishWithPayload(payload);
+                  const scheduled = payload.summary.totalScheduled;
+                  const failed = payload.summary.totalFailed;
+                  toast.success(
+                    `Schedule generation complete – ${scheduled} scheduled` +
+                      (failed > 0 ? `, ${failed} could not be scheduled` : "") + ".",
+                    { autoClose: 5000 }
+                  );
+                  return;
+                }
+                if (status === "failed") {
+                  const errorMessage = data?.errorMessage ?? "Generation failed";
+                  const payload = {
+                    completedAt: Date.now(),
+                    careReceiverIds,
+                    startDate,
+                    endDate,
+                    success: false,
+                    summary: null,
+                    results: null,
+                    error: errorMessage,
+                  };
+                  finishWithPayload(payload);
+                  toast.error(`Schedule generation failed. ${errorMessage}`, {
+                    autoClose: 5000,
+                  });
+                  return;
+                }
+                setTimeout(pollJob, POLL_INTERVAL_MS);
+              })
+              .catch((err) => {
+                const message =
+                  err.response?.data?.error?.message ||
+                  err.response?.data?.message ||
+                  "Failed to get job status";
+                finishWithPayload({
+                  completedAt: Date.now(),
+                  careReceiverIds,
+                  startDate,
+                  endDate,
+                  success: false,
+                  summary: null,
+                  results: null,
+                  error: message,
+                });
+                toast.error("Schedule generation – could not get status.");
+              });
+          };
+          pollJob();
+          return;
+        }
+
         if (response.data.success) {
           const summary = response.data.data.summary ?? {};
           const payload = {
@@ -83,8 +170,7 @@ export function ScheduleGenerationProvider({ children }) {
             results: response.data.data.results ?? [],
             error: null,
           };
-          setLastGeneration(payload);
-          saveToStorage(payload);
+          finishWithPayload(payload);
           const scheduled = payload.summary.totalScheduled;
           const failed = payload.summary.totalFailed;
           toast.success(
@@ -112,8 +198,7 @@ export function ScheduleGenerationProvider({ children }) {
             results: response.data.data?.results ?? [],
             error: errorMessage,
           };
-          setLastGeneration(payload);
-          saveToStorage(payload);
+          finishWithPayload(payload);
           toast.error(`Schedule generation failed. ${errorMessage}`, {
             autoClose: 5000,
           });
@@ -124,7 +209,7 @@ export function ScheduleGenerationProvider({ children }) {
           err.response?.data?.error?.message ||
           err.response?.data?.message ||
           "Failed to generate schedule";
-        const payload = {
+        finishWithPayload({
           completedAt: Date.now(),
           careReceiverIds,
           startDate,
@@ -133,13 +218,8 @@ export function ScheduleGenerationProvider({ children }) {
           summary: null,
           results: null,
           error: message,
-        };
-        setLastGeneration(payload);
-        saveToStorage(payload);
+        });
         toast.error("Schedule generation failed – try again.");
-      })
-      .finally(() => {
-        setIsGenerating(false);
       });
   };
 
@@ -156,6 +236,7 @@ export function ScheduleGenerationProvider({ children }) {
   return (
     <ScheduleGenerationContext.Provider value={value}>
       <ScheduleGenerationRevalidate />
+      <ScheduleSocketSync />
       {children}
     </ScheduleGenerationContext.Provider>
   );
@@ -191,6 +272,84 @@ function ScheduleGenerationRevalidate() {
     lastGeneration?.startDate,
     lastGeneration?.endDate,
   ]);
+
+  return null;
+}
+
+const PROGRESS_REFETCH_DEBOUNCE_MS = 5000;
+
+function getSocketUrl() {
+  const base = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  try {
+    const u = new URL(base);
+    u.pathname = "";
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return "http://localhost:5000";
+  }
+}
+
+function ScheduleSocketSync() {
+  const { runCheck } = useUnscheduledCheck();
+  const progressRefetchTimerRef = useRef(null);
+  const progressDateRangeRef = useRef({ startDate: null, endDate: null });
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const socketUrl = getSocketUrl();
+    const socket = io(socketUrl, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+    });
+
+    const clearProgressTimer = () => {
+      if (progressRefetchTimerRef.current) {
+        clearTimeout(progressRefetchTimerRef.current);
+        progressRefetchTimerRef.current = null;
+      }
+    };
+
+    const invalidateAndRunCheck = (startDate, endDate) => {
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
+      if (startDate && endDate) {
+        runCheck(startDate, endDate, { silent: true });
+      }
+    };
+
+    const scheduleDebouncedRefetch = (startDate, endDate) => {
+      progressDateRangeRef.current = { startDate, endDate };
+      clearProgressTimer();
+      progressRefetchTimerRef.current = setTimeout(() => {
+        progressRefetchTimerRef.current = null;
+        const { startDate: s, endDate: e } = progressDateRangeRef.current;
+        invalidateAndRunCheck(s, e);
+      }, PROGRESS_REFETCH_DEBOUNCE_MS);
+    };
+
+    socket.on("schedule_job_completed", (payload) => {
+      clearProgressTimer();
+      const startDate = payload?.startDate ?? null;
+      const endDate = payload?.endDate ?? null;
+      invalidateAndRunCheck(startDate, endDate);
+      toast.success("Schedule updated.", { autoClose: 3000 });
+    });
+
+    socket.on("schedule_progress", (payload) => {
+      const startDate = payload?.startDate ?? null;
+      const endDate = payload?.endDate ?? null;
+      scheduleDebouncedRefetch(startDate, endDate);
+    });
+
+    return () => {
+      clearProgressTimer();
+      socket.removeAllListeners("schedule_job_completed");
+      socket.removeAllListeners("schedule_progress");
+      socket.disconnect();
+    };
+  }, [runCheck]);
 
   return null;
 }

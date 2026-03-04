@@ -1,7 +1,7 @@
 // frontend/src/pages/Schedule/NeedsReassignment.jsx
 // Shows appointments that need reassignment due to conflicts
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   AlertTriangle,
   User,
@@ -278,4 +278,4 @@ function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
   );
 }
 
-export default NeedsReassignment;
+export default memo(NeedsReassignment);

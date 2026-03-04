@@ -11,6 +11,8 @@
     "format": "prettier --write \"src/**/*.{js,jsx,css}\""
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-query-devtools": "^5.91.3",
     "axios": "^1.5.1",
     "date-fns": "^2.30.0",
     "lucide-react": "^0.292.0",

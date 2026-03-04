@@ -61,6 +61,7 @@ export function UnscheduledCheckProvider({ children }) {
       .then((response) => {
         if (response.data.success) {
           const unscheduled = response.data.data?.unscheduled ?? [];
+          const schedulingInProgress = response.data.data?.schedulingInProgress ?? [];
           const totalAppointments = unscheduled.reduce(
             (sum, item) => sum + (item.missing || 0),
             0
@@ -72,6 +73,7 @@ export function UnscheduledCheckProvider({ children }) {
             data: {
               unscheduled,
               total: unscheduled.length,
+              schedulingInProgress,
             },
           };
           setLastCheck(payload);

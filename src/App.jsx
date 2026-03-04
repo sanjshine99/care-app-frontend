@@ -1,28 +1,45 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+import { QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { queryClient } from "./lib/queryClient";
 import { AuthProvider } from "./contexts/AuthContext";
 import { UnscheduledCheckProvider } from "./contexts/UnscheduledCheckContext";
 import { ScheduleGenerationProvider } from "./contexts/ScheduleGenerationContext";
 import { ConfirmDialogProvider } from "./contexts/ConfirmDialogContext";
+import ErrorBoundary from "./components/ErrorBoundary";
+
+// MainLayout is always needed for authenticated routes — keep eager
 import MainLayout from "./components/Layout/MainLayout";
-import Login from "./pages/Auth/Login";
-import Dashboard from "./pages/Dashboard/Dashboard";
-import CareGiversList from "./pages/CareGivers/CareGiversList";
-import CareGiverForm from "./pages/CareGivers/CareGiverForm";
-import CareReceiversList from "./pages/CareReceivers/CareReceiversList";
-import Notifications from "./pages/Notifications/Notifications";
-import Settings from "./pages/Settings/Settings";
-import Schedule from "./pages/Schedule/Schedule";
-import Map from "./pages/Map/Map";
-import CareGiverAvailability from "./pages/CareGivers/CareGiverAvailability";
-import CareGiverDetail from "./pages/CareGivers/CareGiverDetail";
-import CareReceiverForm from "./pages/CareReceivers/CareReceiverForm";
-import CareReceiverDetail from "./pages/CareReceivers/CareReceiverDetail";
-import GenerateSchedule from "./pages/Schedule/GenerateSchedule";
-import UsersList from "./pages/Users/UsersList";
-import UserForm from "./pages/Users/UserForm";
+
+// Lazy-load all page components — each becomes a separate JS chunk
+const Login = lazy(() => import("./pages/Auth/Login"));
+const Dashboard = lazy(() => import("./pages/Dashboard/Dashboard"));
+const CareGiversList = lazy(() => import("./pages/CareGivers/CareGiversList"));
+const CareGiverForm = lazy(() => import("./pages/CareGivers/CareGiverForm"));
+const CareGiverDetail = lazy(() => import("./pages/CareGivers/CareGiverDetail"));
+const CareGiverAvailability = lazy(() => import("./pages/CareGivers/CareGiverAvailability"));
+const CareReceiversList = lazy(() => import("./pages/CareReceivers/CareReceiversList"));
+const CareReceiverForm = lazy(() => import("./pages/CareReceivers/CareReceiverForm"));
+const CareReceiverDetail = lazy(() => import("./pages/CareReceivers/CareReceiverDetail"));
+const Schedule = lazy(() => import("./pages/Schedule/Schedule"));
+const GenerateSchedule = lazy(() => import("./pages/Schedule/GenerateSchedule"));
+const Notifications = lazy(() => import("./pages/Notifications/Notifications"));
+const Map = lazy(() => import("./pages/Map/Map"));
+const Settings = lazy(() => import("./pages/Settings/Settings"));
+const UsersList = lazy(() => import("./pages/Users/UsersList"));
+const UserForm = lazy(() => import("./pages/Users/UserForm"));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="animate-spin h-10 w-10 border-4 border-primary-600 border-t-transparent rounded-full" />
+    </div>
+  );
+}
 
 // Protected route wrapper
 function ProtectedRoute({ children }) {
@@ -38,11 +55,14 @@ function PublicRoute({ children }) {
 
 function App() {
   return (
+    <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <AuthProvider>
         <UnscheduledCheckProvider>
         <ConfirmDialogProvider>
         <ScheduleGenerationProvider>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public routes */}
           <Route
@@ -75,6 +95,7 @@ function App() {
               path="caregivers/:id/availability"
               element={<CareGiverAvailability />}
             />
+
             {/* Care Receivers */}
             <Route path="carereceivers" element={<CareReceiversList />} />
             <Route path="carereceivers/new" element={<CareReceiverForm />} />
@@ -85,7 +106,7 @@ function App() {
             <Route path="schedule" element={<Schedule />} />
             <Route path="schedule/generate" element={<GenerateSchedule />} />
 
-            {/* Map - ADD THIS ROUTE */}
+            {/* Map */}
             <Route path="map" element={<Map />} />
 
             {/* Notifications */}
@@ -103,6 +124,7 @@ function App() {
           {/* 404 */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </Suspense>
 
         {/* Toast notifications */}
         <ToastContainer
@@ -121,6 +143,9 @@ function App() {
         </UnscheduledCheckProvider>
       </AuthProvider>
     </BrowserRouter>
+    {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+    </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
