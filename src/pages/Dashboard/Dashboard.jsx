@@ -1,96 +1,83 @@
 // frontend/src/pages/Dashboard.jsx
-// Dashboard with real statistics
-
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Users, UserCheck, Calendar, TrendingUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { careGiverService } from "../../services/careGiverService";
 import { careReceiverService } from "../../services/careReceiverService";
 import { useAuth } from "../../contexts/AuthContext";
 import api from "../../services/api";
 
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+async function fetchDashboardStats() {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  const [cgResponse, crResponse, scheduleStats] = await Promise.all([
+    careGiverService.getAll({ limit: 1 }),
+    careReceiverService.getAll({ limit: 1 }),
+    api
+      .get("/schedule/stats", {
+        params: {
+          startDate: formatDate(startOfMonth),
+          endDate: formatDate(endOfMonth),
+        },
+      })
+      .catch(() => ({ data: { data: { stats: {} } } })),
+  ]);
+
+  const scheduleData = scheduleStats.data?.data?.stats || {};
+  return {
+    careGivers: cgResponse.data?.pagination?.total || 0,
+    careReceivers: crResponse.data?.pagination?.total || 0,
+    appointments: scheduleData.total || 0,
+    completionRate: scheduleData.completionRate || "0%",
+  };
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState({
-    careGivers: 0,
-    careReceivers: 0,
-    appointments: 0,
-    completionRate: "0%",
-    loading: true,
+
+  // React Query: data is cached for 5 minutes — navigating back to Dashboard
+  // will not trigger a new API call if data is still fresh.
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: fetchDashboardStats,
+    staleTime: 5 * 60 * 1000,
   });
-
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
-    try {
-      // Get current month date range for appointment stats
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-      const formatDate = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-      };
-
-      const [cgResponse, crResponse, scheduleStats] = await Promise.all([
-        careGiverService.getAll({ limit: 1 }),
-        careReceiverService.getAll({ limit: 1 }),
-        api
-          .get("/schedule/stats", {
-            params: {
-              startDate: formatDate(startOfMonth),
-              endDate: formatDate(endOfMonth),
-            },
-          })
-          .catch(() => ({ data: { data: { stats: {} } } })),
-      ]);
-
-      const scheduleData = scheduleStats.data?.data?.stats || {};
-
-      setStats({
-        careGivers: cgResponse.data?.pagination?.total || 0,
-        careReceivers: crResponse.data?.pagination?.total || 0,
-        appointments: scheduleData.total || 0,
-        completionRate: scheduleData.completionRate || "0%",
-        loading: false,
-      });
-    } catch (error) {
-      console.error("Error loading stats:", error);
-      setStats((prev) => ({ ...prev, loading: false }));
-    }
-  };
 
   const statCards = [
     {
       title: "Care Givers",
-      value: stats.careGivers,
+      value: stats?.careGivers ?? 0,
       icon: Users,
       color: "bg-blue-500",
       path: "/caregivers",
     },
     {
       title: "Care Receivers",
-      value: stats.careReceivers,
+      value: stats?.careReceivers ?? 0,
       icon: UserCheck,
       color: "bg-green-500",
       path: "/carereceivers",
     },
     {
       title: "Appointments (This Month)",
-      value: stats.appointments,
+      value: stats?.appointments ?? 0,
       icon: Calendar,
       color: "bg-purple-500",
       path: "/schedule",
     },
     {
       title: "Completion Rate",
-      value: stats.completionRate,
+      value: stats?.completionRate ?? "0%",
       icon: TrendingUp,
       color: "bg-orange-500",
       path: "/schedule",
@@ -121,7 +108,7 @@ function Dashboard() {
                   {stat.title}
                 </p>
                 <p className="text-3xl font-bold mt-2">
-                  {stats.loading ? (
+                  {isLoading ? (
                     <span className="text-gray-400">...</span>
                   ) : (
                     stat.value
@@ -178,12 +165,12 @@ function Dashboard() {
           <div>
             <p className="text-gray-600 text-sm mb-1">Total Users</p>
             <p className="text-2xl font-bold">
-              {stats.careGivers + stats.careReceivers}
+              {isLoading ? "..." : (stats?.careGivers ?? 0) + (stats?.careReceivers ?? 0)}
             </p>
           </div>
           <div>
             <p className="text-gray-600 text-sm mb-1">This Month's Appointments</p>
-            <p className="text-2xl font-bold">{stats.appointments}</p>
+            <p className="text-2xl font-bold">{isLoading ? "..." : stats?.appointments ?? 0}</p>
           </div>
           <div>
             <p className="text-gray-600 text-sm mb-1">System Health</p>

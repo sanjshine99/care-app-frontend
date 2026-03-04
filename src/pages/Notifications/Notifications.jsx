@@ -1,7 +1,5 @@
-// frontend/src/pages/Notifications/Notifications.jsx
-// Complete notification center with filtering, sorting, and bulk actions
-
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   Bell,
   Check,
@@ -14,109 +12,92 @@ import {
   Info,
   AlertTriangle,
   XCircle,
-  ChevronDown,
   ExternalLink,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
+import { queryClient } from "../../lib/queryClient";
+
+const LIMIT = 20;
 
 function Notifications() {
   const navigate = useNavigate();
   const confirmDialog = useConfirmDialog();
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [filters, setFilters] = useState({
-    status: "",
-    type: "",
-    priority: "",
-  });
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    pages: 0,
-  });
+  const [filters, setFilters] = useState({ status: "", type: "", priority: "" });
+  const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    loadNotifications();
-    loadStats();
-  }, [filters, pagination.page]);
-
-  const loadNotifications = async () => {
-    try {
-      setLoading(true);
-      const params = {
-        page: pagination.page,
-        limit: pagination.limit,
-        ...filters,
-      };
-
-      // Remove empty filters
-      Object.keys(params).forEach((key) => {
-        if (params[key] === "") delete params[key];
-      });
-
-      const response = await api.get("/notifications", { params });
-
-      if (response.data.success) {
-        setNotifications(response.data.data.notifications);
-        setPagination(response.data.data.pagination);
-      }
-    } catch (error) {
-      console.error("Error loading notifications:", error);
-      toast.error("Failed to load notifications");
-    } finally {
-      setLoading(false);
-    }
+  const handleFilterChange = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(1);
   };
 
-  const loadStats = async () => {
-    try {
-      const response = await api.get("/notifications/stats");
-      if (response.data.success) {
-        setStats(response.data.data.stats);
-      }
-    } catch (error) {
-      console.error("Error loading stats:", error);
-    }
+  const buildParams = () => {
+    const params = { page, limit: LIMIT };
+    if (filters.status) params.status = filters.status;
+    if (filters.type) params.type = filters.type;
+    if (filters.priority) params.priority = filters.priority;
+    return params;
   };
 
-  const handleMarkAsRead = async (id) => {
-    try {
-      await api.put(`/notifications/${id}/mark-read`);
-      loadNotifications();
-      toast.success("Marked as read");
-    } catch (error) {
-      toast.error("Failed to mark as read");
-    }
+  const { data: notifData, isLoading, refetch } = useQuery({
+    queryKey: ["notifications", filters, page],
+    queryFn: () => api.get("/notifications", { params: buildParams() }).then((r) => r.data.data),
+    placeholderData: (prev) => prev,
+    staleTime: 30 * 1000,
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ["notification-stats"],
+    queryFn: () => api.get("/notifications/stats").then((r) => r.data.data.stats),
+    staleTime: 30 * 1000,
+  });
+
+  const notifications = notifData?.notifications ?? [];
+  const pagination = notifData?.pagination ?? { page: 1, pages: 0, total: 0, limit: LIMIT };
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    queryClient.invalidateQueries({ queryKey: ["notification-stats"] });
   };
 
-  const handleMarkAllRead = async () => {
-    try {
-      await api.put("/notifications/mark-all-read");
-      loadNotifications();
-      loadStats();
-      toast.success("All notifications marked as read");
-    } catch (error) {
-      toast.error("Failed to mark all as read");
-    }
-  };
+  const markAsReadMutation = useMutation({
+    mutationFn: (id) => api.put(`/notifications/${id}/mark-read`),
+    onSuccess: () => { toast.success("Marked as read"); invalidateAll(); },
+    onError: () => toast.error("Failed to mark as read"),
+  });
 
-  const handleArchive = async (id) => {
-    try {
-      await api.put(`/notifications/${id}/archive`);
-      loadNotifications();
-      loadStats();
-      toast.success("Notification archived");
-    } catch (error) {
-      toast.error("Failed to archive");
-    }
-  };
+  const markAllReadMutation = useMutation({
+    mutationFn: () => api.put("/notifications/mark-all-read"),
+    onSuccess: () => { toast.success("All notifications marked as read"); invalidateAll(); },
+    onError: () => toast.error("Failed to mark all as read"),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (id) => api.put(`/notifications/${id}/archive`),
+    onSuccess: () => { toast.success("Notification archived"); invalidateAll(); },
+    onError: () => toast.error("Failed to archive"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/notifications/${id}`),
+    onSuccess: () => { toast.success("Notification deleted"); invalidateAll(); },
+    onError: () => toast.error("Failed to delete"),
+  });
+
+  const bulkActionMutation = useMutation({
+    mutationFn: ({ action, notificationIds }) =>
+      api.post("/notifications/bulk-action", { action, notificationIds }),
+    onSuccess: () => {
+      setSelectedIds([]);
+      toast.success("Bulk action completed");
+      invalidateAll();
+    },
+    onError: () => toast.error("Bulk action failed"),
+  });
 
   const handleDelete = async (id) => {
     if (!confirmDialog?.confirm) {
@@ -130,77 +111,34 @@ function Notifications() {
       confirmLabel: "Delete",
     });
     if (!ok) return;
-
-    try {
-      await api.delete(`/notifications/${id}`);
-      loadNotifications();
-      loadStats();
-      toast.success("Notification deleted");
-    } catch (error) {
-      toast.error("Failed to delete");
-    }
+    deleteMutation.mutate(id);
   };
 
-  const handleBulkAction = async (action) => {
-    if (selectedIds.length === 0) {
-      toast.error("No notifications selected");
-      return;
-    }
-
-    try {
-      await api.post("/notifications/bulk-action", {
-        action,
-        notificationIds: selectedIds,
-      });
-
-      setSelectedIds([]);
-      loadNotifications();
-      loadStats();
-      toast.success(`Bulk action completed`);
-    } catch (error) {
-      toast.error("Bulk action failed");
-    }
-  };
-
-  const handleSelectAll = () => {
-    if (selectedIds.length === notifications.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(notifications.map((n) => n._id));
-    }
-  };
-
-  const handleToggleSelect = (id) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter((sid) => sid !== id));
-    } else {
-      setSelectedIds([...selectedIds, id]);
-    }
-  };
-
-  const handleNotificationClick = async (notification) => {
-    // Mark as read if unread
+  const handleNotificationClick = (notification) => {
     if (notification.status === "unread") {
-      await handleMarkAsRead(notification._id);
+      markAsReadMutation.mutate(notification._id);
     }
-
-    // Navigate to action URL if present
     if (notification.actionUrl) {
       navigate(notification.actionUrl);
     }
   };
 
+  const handleSelectAll = () => {
+    setSelectedIds(selectedIds.length === notifications.length ? [] : notifications.map((n) => n._id));
+  };
+
+  const handleToggleSelect = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((sid) => sid !== id) : [...prev, id]
+    );
+  };
+
   const getTypeIcon = (type) => {
     switch (type) {
-      case "success":
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case "error":
-        return <XCircle className="h-5 w-5 text-red-500" />;
-      case "warning":
-        return <AlertTriangle className="h-5 w-5 text-orange-500" />;
-      case "info":
-      default:
-        return <Info className="h-5 w-5 text-blue-500" />;
+      case "success": return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case "error": return <XCircle className="h-5 w-5 text-red-500" />;
+      case "warning": return <AlertTriangle className="h-5 w-5 text-orange-500" />;
+      default: return <Info className="h-5 w-5 text-blue-500" />;
     }
   };
 
@@ -211,11 +149,8 @@ function Notifications() {
       high: "bg-orange-100 text-orange-700",
       critical: "bg-red-100 text-red-700",
     };
-
     return (
-      <span
-        className={`px-2 py-1 rounded text-xs font-medium ${classes[priority]}`}
-      >
+      <span className={`px-2 py-1 rounded text-xs font-medium ${classes[priority]}`}>
         {priority.toUpperCase()}
       </span>
     );
@@ -223,17 +158,14 @@ function Notifications() {
 
   const formatDate = (date) => {
     const d = new Date(date);
-    const now = new Date();
-    const diffMs = now - d;
+    const diffMs = Date.now() - d;
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
-
     if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-
     return d.toLocaleDateString();
   };
 
@@ -268,10 +200,7 @@ function Notifications() {
               <Filter className="h-5 w-5" />
               Filters
             </button>
-            <button
-              onClick={loadNotifications}
-              className="btn-secondary flex items-center gap-2"
-            >
+            <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2">
               <RefreshCw className="h-5 w-5" />
               Refresh
             </button>
@@ -300,9 +229,7 @@ function Notifications() {
           </div>
           <div className="card">
             <p className="text-sm text-gray-600">Action Required</p>
-            <p className="text-2xl font-bold text-orange-600">
-              {stats.actionRequired}
-            </p>
+            <p className="text-2xl font-bold text-orange-600">{stats.actionRequired}</p>
           </div>
         </div>
       )}
@@ -313,14 +240,10 @@ function Notifications() {
           <h3 className="font-semibold mb-4">Filters</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Status
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
               <select
                 value={filters.status}
-                onChange={(e) =>
-                  setFilters({ ...filters, status: e.target.value })
-                }
+                onChange={(e) => handleFilterChange("status", e.target.value)}
                 className="input"
               >
                 <option value="">All</option>
@@ -332,14 +255,10 @@ function Notifications() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Type
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
               <select
                 value={filters.type}
-                onChange={(e) =>
-                  setFilters({ ...filters, type: e.target.value })
-                }
+                onChange={(e) => handleFilterChange("type", e.target.value)}
                 className="input"
               >
                 <option value="">All</option>
@@ -351,14 +270,10 @@ function Notifications() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Priority
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
               <select
                 value={filters.priority}
-                onChange={(e) =>
-                  setFilters({ ...filters, priority: e.target.value })
-                }
+                onChange={(e) => handleFilterChange("priority", e.target.value)}
                 className="input"
               >
                 <option value="">All</option>
@@ -371,9 +286,10 @@ function Notifications() {
 
             <div className="flex items-end">
               <button
-                onClick={() =>
-                  setFilters({ status: "", type: "", priority: "" })
-                }
+                onClick={() => {
+                  setFilters({ status: "", type: "", priority: "" });
+                  setPage(1);
+                }}
                 className="btn-secondary w-full"
               >
                 Clear Filters
@@ -392,14 +308,18 @@ function Notifications() {
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => handleBulkAction("mark_read")}
+                onClick={() =>
+                  bulkActionMutation.mutate({ action: "mark_read", notificationIds: selectedIds })
+                }
                 className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2 text-sm"
               >
                 <Check className="h-4 w-4" />
                 Mark Read
               </button>
               <button
-                onClick={() => handleBulkAction("archive")}
+                onClick={() =>
+                  bulkActionMutation.mutate({ action: "archive", notificationIds: selectedIds })
+                }
                 className="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-2 text-sm"
               >
                 <Archive className="h-4 w-4" />
@@ -420,7 +340,7 @@ function Notifications() {
       {stats && stats.unread > 0 && (
         <div className="mb-6">
           <button
-            onClick={handleMarkAllRead}
+            onClick={() => markAllReadMutation.mutate()}
             className="text-primary-600 hover:text-primary-700 text-sm flex items-center gap-2"
           >
             <CheckCircle className="h-4 w-4" />
@@ -431,7 +351,7 @@ function Notifications() {
 
       {/* Notifications List */}
       <div className="card">
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full" />
           </div>
@@ -490,16 +410,12 @@ function Notifications() {
                         <h3 className="font-semibold text-gray-800 flex items-center gap-2">
                           {notification.title}
                           {notification.status === "unread" && (
-                            <span className="h-2 w-2 bg-blue-600 rounded-full"></span>
+                            <span className="h-2 w-2 bg-blue-600 rounded-full" />
                           )}
                         </h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {notification.message}
-                        </p>
+                        <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
                       </div>
-                      <div className="ml-4">
-                        {getPriorityBadge(notification.priority)}
-                      </div>
+                      <div className="ml-4">{getPriorityBadge(notification.priority)}</div>
                     </div>
 
                     <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -525,7 +441,7 @@ function Notifications() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleMarkAsRead(notification._id);
+                          markAsReadMutation.mutate(notification._id);
                         }}
                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
                         title="Mark as read"
@@ -533,18 +449,16 @@ function Notifications() {
                         <Check className="h-4 w-4 text-blue-600" />
                       </button>
                     )}
-
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleArchive(notification._id);
+                        archiveMutation.mutate(notification._id);
                       }}
                       className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                       title="Archive"
                     >
                       <Archive className="h-4 w-4 text-gray-600" />
                     </button>
-
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -565,33 +479,20 @@ function Notifications() {
               <div className="flex justify-between items-center mt-6 pt-6 border-t">
                 <p className="text-sm text-gray-600">
                   Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
-                  {Math.min(
-                    pagination.page * pagination.limit,
-                    pagination.total
-                  )}{" "}
-                  of {pagination.total}
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
+                  {pagination.total}
                 </p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() =>
-                      setPagination({
-                        ...pagination,
-                        page: pagination.page - 1,
-                      })
-                    }
-                    disabled={pagination.page === 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    disabled={page === 1}
                     className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
                   <button
-                    onClick={() =>
-                      setPagination({
-                        ...pagination,
-                        page: pagination.page + 1,
-                      })
-                    }
-                    disabled={pagination.page === pagination.pages}
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={page === pagination.pages}
                     className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next

@@ -1,8 +1,8 @@
 // frontend/src/pages/Schedule/UnscheduledList.jsx
 // FIXED - Uses correct endpoints and opens ManualScheduleModal
 
-import { useState } from "react";
-import { AlertTriangle, User, Clock, X, RefreshCw } from "lucide-react";
+import { memo, useState, useMemo } from "react";
+import { AlertTriangle, User, Clock, X, RefreshCw, Loader2 } from "lucide-react";
 import moment from "moment";
 import api from "../../services/api";
 import { toast } from "react-toastify";
@@ -26,7 +26,11 @@ function getAnalyzingKey(detail, careReceiver) {
   return `${careReceiver.id}-${dateStr}-${detail.visitNumber}`;
 }
 
-function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
+function UnscheduledList({ unscheduled, schedulingInProgress = [], onScheduleSuccess, loading }) {
+  const inProgressSet = useMemo(
+    () => new Set((schedulingInProgress || []).map((p) => String(p.careReceiverId))),
+    [schedulingInProgress]
+  );
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showManualScheduleModal, setShowManualScheduleModal] = useState(false);
@@ -135,26 +139,43 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
           <p>No unscheduled appointments</p>
         </div>
       ) : (
-        unscheduled.map((group, groupIndex) => (
-          <div key={groupIndex} className="space-y-2">
+        unscheduled.map((group) => {
+          const crId = group.careReceiver?.id ?? group.careReceiver?._id;
+          const isSchedulingInProgress = crId && inProgressSet.has(String(crId));
+
+          return (
+          <div key={crId} className="space-y-2">
             {/* Care Receiver Header */}
             <div className="font-semibold text-lg text-gray-800 flex items-center gap-2">
               <User className="h-5 w-5 text-primary-600" />
               {group.careReceiver?.name || "Unknown Care Receiver"}
-              <span className="text-sm text-gray-500 font-normal">
-                ({group.missing} unscheduled visit
-                {group.missing !== 1 ? "s" : ""})
-              </span>
+              {isSchedulingInProgress ? (
+                <span className="text-sm text-blue-600 font-normal flex items-center gap-1">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Scheduling in progress…
+                </span>
+              ) : (
+                <span className="text-sm text-gray-500 font-normal">
+                  ({group.missing} unscheduled visit
+                  {group.missing !== 1 ? "s" : ""})
+                </span>
+              )}
             </div>
 
+            {isSchedulingInProgress ? (
+              <div className="border border-blue-200 bg-blue-50 rounded-lg p-4 ml-8 text-sm text-blue-800">
+                Appointments for this care receiver are being generated. They will appear in the calendar when ready.
+              </div>
+            ) : (
+            <>
             {/* Details */}
             {group.details &&
-              group.details.map((detail, detailIndex) => {
+              group.details.map((detail) => {
                 const rowKey = getAnalyzingKey(detail, group.careReceiver);
                 const isAnalyzing = analyzingKey === rowKey;
                 return (
                   <div
-                    key={`${groupIndex}-${detailIndex}`}
+                    key={`${group.careReceiver?.id || group.careReceiver?._id}-${detail.date}-${detail.visitNumber}`}
                     className="border border-amber-300 bg-amber-50 rounded-lg p-4 ml-8"
                   >
                     <div className="flex items-start justify-between">
@@ -212,8 +233,11 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
                   </div>
                 );
               })}
+            </>
+            )}
           </div>
-        ))
+        );
+        })
       )}
 
       {/* Analysis Modal */}
@@ -449,4 +473,4 @@ function UnscheduledList({ unscheduled, onScheduleSuccess, loading }) {
   );
 }
 
-export default UnscheduledList;
+export default memo(UnscheduledList);

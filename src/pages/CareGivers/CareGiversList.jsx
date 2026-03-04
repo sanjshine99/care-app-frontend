@@ -1,53 +1,46 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { careGiverService } from "../../services/careGiverService";
 import { toast } from "react-toastify";
 import { Calendar } from "lucide-react";
 import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
+import { queryClient } from "../../lib/queryClient";
+
+const PAGE_SIZE = 10;
 
 function CareGiversList() {
   const navigate = useNavigate();
   const confirmDialog = useConfirmDialog();
-  const [careGivers, setCareGivers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 10,
-    total: 0,
-    pages: 0,
+  const [page, setPage] = useState(1);
+
+  // useQuery: data cached by [page, search] key — navigating back shows cached data instantly.
+  // placeholderData keeps previous page visible while next page loads (no blank flash).
+  const { data, isLoading } = useQuery({
+    queryKey: ["caregivers", page, search],
+    queryFn: () =>
+      careGiverService.getAll({ page, limit: PAGE_SIZE, search: search || undefined }),
+    placeholderData: (prev) => prev,
+    staleTime: 2 * 60 * 1000,
   });
 
-  useEffect(() => {
-    loadCareGivers();
-  }, [search]); // Remove pagination.page from dependencies to avoid infinite loop
+  const careGivers = data?.data?.careGivers ?? [];
+  const pagination = data?.data?.pagination ?? { page: 1, pages: 0, total: 0 };
 
-  const loadCareGivers = async () => {
-    try {
-      setLoading(true);
-      const response = await careGiverService.getAll({
-        page: pagination.page,
-        limit: pagination.limit,
-        search: search || undefined,
-      });
-
-      if (response?.success && response?.data) {
-        setCareGivers(response.data.careGivers || []);
-        setPagination(
-          response.data.pagination || { page: 1, limit: 10, total: 0, pages: 0 }
-        );
-      } else {
-        setCareGivers([]);
-      }
-    } catch (error) {
-      console.error("Error loading care givers:", error);
-      setCareGivers([]);
-      toast.error("Failed to load care givers");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const deleteMutation = useMutation({
+    mutationFn: ({ id }) => careGiverService.delete(id),
+    onSuccess: () => {
+      toast.success("Care giver deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["caregivers"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+    },
+    onError: (error) => {
+      const message = error.response?.data?.error?.message || "Failed to delete care giver";
+      toast.error(message);
+    },
+  });
 
   const handleDelete = async (id, name) => {
     const ok = await confirmDialog.confirm({
@@ -57,20 +50,12 @@ function CareGiversList() {
       confirmLabel: "Delete",
     });
     if (!ok) return;
-    try {
-      await careGiverService.delete(id);
-      toast.success("Care giver deleted successfully");
-      loadCareGivers();
-    } catch (error) {
-      const message =
-        error.response?.data?.error?.message || "Failed to delete care giver";
-      toast.error(message);
-    }
+    deleteMutation.mutate({ id });
   };
 
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
+    setPage(1);
   };
 
   return (
@@ -108,7 +93,7 @@ function CareGiversList() {
 
       {/* Table Card */}
       <div className="card overflow-hidden">
-        {loading ? (
+        {isLoading ? (
           <div className="text-center py-12">
             <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full mx-auto" />
             <p className="text-gray-600 mt-4">Loading care givers...</p>
@@ -131,35 +116,19 @@ function CareGiversList() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Skills
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skills</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {careGivers.map((cg) => (
                     <tr key={cg._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="font-medium text-gray-900">
-                            {cg.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {cg.address?.postcode}
-                          </div>
-                        </div>
+                        <div className="font-medium text-gray-900">{cg.name}</div>
+                        <div className="text-sm text-gray-500">{cg.address?.postcode}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{cg.email}</div>
@@ -168,10 +137,7 @@ function CareGiversList() {
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
                           {cg.skills?.slice(0, 2).map((skill) => (
-                            <span
-                              key={skill}
-                              className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
-                            >
+                            <span key={skill} className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
                               {skill.replace("_", " ")}
                             </span>
                           ))}
@@ -183,45 +149,21 @@ function CareGiversList() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 text-xs font-semibold rounded ${
-                            cg.isActive
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
+                        <span className={`px-2 py-1 text-xs font-semibold rounded ${cg.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
                           {cg.isActive ? "Active" : "Inactive"}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => navigate(`/caregivers/${cg._id}`)}
-                          className="text-primary-600 hover:text-primary-900 mr-3"
-                          title="View Details"
-                        >
+                        <button onClick={() => navigate(`/caregivers/${cg._id}`)} className="text-primary-600 hover:text-primary-900 mr-3" title="View Details">
                           <Eye className="h-5 w-5 inline" />
                         </button>
-                        <button
-                          onClick={() => navigate(`/caregivers/${cg._id}/edit`)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                          title="Edit"
-                        >
+                        <button onClick={() => navigate(`/caregivers/${cg._id}/edit`)} className="text-blue-600 hover:text-blue-900 mr-3" title="Edit">
                           <Edit className="h-5 w-5 inline" />
                         </button>
-                        <button
-                          onClick={() =>
-                            navigate(`/caregivers/${cg._id}/availability`)
-                          }
-                          className="text-purple-600 hover:text-purple-900 mr-3"
-                          title="Manage Availability"
-                        >
+                        <button onClick={() => navigate(`/caregivers/${cg._id}/availability`)} className="text-purple-600 hover:text-purple-900 mr-3" title="Manage Availability">
                           <Calendar className="h-5 w-5 inline" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(cg._id, cg.name)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete"
-                        >
+                        <button onClick={() => handleDelete(cg._id, cg.name)} className="text-red-600 hover:text-red-900" title="Delete" disabled={deleteMutation.isPending}>
                           <Trash2 className="h-5 w-5 inline" />
                         </button>
                       </td>
@@ -235,39 +177,15 @@ function CareGiversList() {
             {pagination.pages > 1 && (
               <div className="px-6 py-4 flex items-center justify-between border-t">
                 <div className="text-sm text-gray-700">
-                  Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
-                  {Math.min(
-                    pagination.page * pagination.limit,
-                    pagination.total
-                  )}{" "}
-                  of {pagination.total} results
+                  Showing {(page - 1) * PAGE_SIZE + 1} to{" "}
+                  {Math.min(page * PAGE_SIZE, pagination.total)} of {pagination.total} results
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      const newPage = pagination.page - 1;
-                      setPagination((prev) => ({ ...prev, page: newPage }));
-                      // Manually trigger reload
-                      setTimeout(() => loadCareGivers(), 0);
-                    }}
-                    disabled={pagination.page === 1}
-                    className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                  <button onClick={() => setPage((p) => p - 1)} disabled={page === 1} className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed">
                     Previous
                   </button>
-                  <span className="px-3 py-1">
-                    Page {pagination.page} of {pagination.pages}
-                  </span>
-                  <button
-                    onClick={() => {
-                      const newPage = pagination.page + 1;
-                      setPagination((prev) => ({ ...prev, page: newPage }));
-                      // Manually trigger reload
-                      setTimeout(() => loadCareGivers(), 0);
-                    }}
-                    disabled={pagination.page === pagination.pages}
-                    className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                  <span className="px-3 py-1">Page {page} of {pagination.pages}</span>
+                  <button onClick={() => setPage((p) => p + 1)} disabled={page === pagination.pages} className="px-3 py-1 border rounded disabled:opacity-50 disabled:cursor-not-allowed">
                     Next
                   </button>
                 </div>
