@@ -465,8 +465,9 @@ function CalendarView({
             {selectedEvent.doubleHanded && (
               <div className="mb-6">
                 <div className="bg-pink-50 border border-pink-200 rounded-lg p-3">
-                  <p className="text-pink-800 font-medium">
-                    🤝 Double-Handed Care Required
+                  <p className="text-pink-800 font-medium flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Double-Handed Care Required
                   </p>
                 </div>
               </div>

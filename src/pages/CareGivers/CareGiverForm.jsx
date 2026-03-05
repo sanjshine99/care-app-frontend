@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Check, X } from 'lucide-react';
 import { careGiverService } from '../../services/careGiverService';
 import { toast } from 'react-toastify';
 
@@ -391,10 +391,10 @@ function CareGiverForm() {
                       <div className="animate-spin h-4 w-4 border-2 border-primary-600 border-t-transparent rounded-full" />
                     )}
                     {postcodeStatus === 'valid' && (
-                      <span className="text-green-500 font-bold text-sm">✓</span>
+                      <Check className="h-4 w-4 text-green-500" />
                     )}
                     {postcodeStatus === 'invalid' && (
-                      <span className="text-red-500 font-bold text-sm">✗</span>
+                      <X className="h-4 w-4 text-red-500" />
                     )}
                   </div>
                 </div>

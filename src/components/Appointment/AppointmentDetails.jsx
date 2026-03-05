@@ -2,7 +2,7 @@
 // FIXED - Correct API endpoints (removed double /api/ prefix)
 
 import { useState, useEffect } from "react";
-import { X, User, Phone, MapPin, Clock, CheckCircle, Star } from "lucide-react";
+import { X, User, Phone, MapPin, Clock, CheckCircle, Star, Users } from "lucide-react";
 import moment from "moment";
 import api from "../services/api";
 import { toast } from "react-toastify";
@@ -274,8 +274,9 @@ function AppointmentDetails({
         {appointment.doubleHanded && (
           <div className="mb-6">
             <div className="bg-pink-50 border border-pink-200 rounded-lg p-3">
-              <p className="text-pink-800 font-medium">
-                🤝 Double-Handed Care Required
+              <p className="text-pink-800 font-medium flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Double-Handed Care Required
               </p>
             </div>
           </div>

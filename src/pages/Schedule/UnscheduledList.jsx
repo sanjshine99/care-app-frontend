@@ -2,7 +2,7 @@
 // FIXED - Uses correct endpoints and opens ManualScheduleModal
 
 import { memo, useState, useMemo } from "react";
-import { AlertTriangle, User, Clock, X, RefreshCw, Loader2 } from "lucide-react";
+import { AlertTriangle, User, Clock, X, RefreshCw, Loader2, Check } from "lucide-react";
 import moment from "moment";
 import api from "../../services/api";
 import { toast } from "react-toastify";
@@ -362,7 +362,11 @@ function UnscheduledList({ unscheduled, schedulingInProgress = [], onScheduleSuc
                                 : "bg-red-200 text-red-800"
                             }`}
                           >
-                            {cg.canAssign ? "✓ Can Assign" : "✗ Cannot Assign"}
+                            {cg.canAssign ? (
+                              <><Check className="h-3.5 w-3.5 inline mr-1" />Can Assign</>
+                            ) : (
+                              <><X className="h-3.5 w-3.5 inline mr-1" />Cannot Assign</>
+                            )}
                           </span>
                         </div>
 

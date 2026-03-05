@@ -13,6 +13,10 @@ import {
   AlertCircle,
   Navigation,
   Maximize2,
+  Mail,
+  Phone,
+  Target,
+  Info,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
@@ -295,12 +299,12 @@ function Map() {
             </div>
           </div>
           <div style="font-size: 12px; color: #666;">
-            <p style="margin: 4px 0;">📧 ${location.email}</p>
-            <p style="margin: 4px 0;">📞 ${location.phone}</p>
+            <p style="margin: 4px 0;">Email: ${location.email}</p>
+            <p style="margin: 4px 0;">Phone: ${location.phone}</p>
             ${
               isCareGiver
-                ? `<p style="margin: 4px 0;">🎯 ${location.skills.length} skills</p>`
-                : `<p style="margin: 4px 0;"> ${location.dailyVisits} daily visits</p>`
+                ? `<p style="margin: 4px 0;">Skills: ${location.skills.length}</p>`
+                : `<p style="margin: 4px 0;">${location.dailyVisits} daily visits</p>`
             }
           </div>
         </div>
@@ -519,8 +523,8 @@ function Map() {
                 </div>
 
                 <div className="space-y-2 text-sm">
-                  <p className="text-gray-600">📧 {selectedLocation.email}</p>
-                  <p className="text-gray-600">📞 {selectedLocation.phone}</p>
+                  <p className="text-gray-600 flex items-center gap-1"><Mail className="h-3.5 w-3.5" />{selectedLocation.email}</p>
+                  <p className="text-gray-600 flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{selectedLocation.phone}</p>
                   {selectedLocation.type === "caregiver" && (
                     <div>
                       <p className="text-gray-600 font-medium mb-1">Skills:</p>
@@ -570,8 +574,9 @@ function Map() {
                 <div className="w-3 h-3 rounded-full bg-green-500"></div>
                 <span>Green markers = Care Receivers</span>
               </div>
-              <p className="mt-3 text-gray-500">
-                💡 Click refresh to update locations after changes
+              <p className="mt-3 text-gray-500 flex items-center gap-1">
+                <Info className="h-3.5 w-3.5 flex-shrink-0" />
+                Click refresh to update locations after changes
               </p>
             </div>
           </div>
