@@ -21,9 +21,10 @@ import {
 import { toast } from "react-toastify";
 import api from "../../services/api";
 
-// Set Mapbox access token
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-mapboxgl.accessToken = MAPBOX_TOKEN;
+if (MAPBOX_TOKEN) {
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+}
 
 function Map() {
   const mapContainer = useRef(null);
@@ -52,37 +53,65 @@ function Map() {
   const [mapStyle, setMapStyle] = useState(
     "mapbox://styles/mapbox/streets-v12",
   );
+  const [mapError, setMapError] = useState(null);
+  const [regeocoding, setRegeocoding] = useState(false);
 
-  // Fallback center (middle of England) — overridden immediately by fitMapToBounds once data loads
   const defaultCenter = { lng: -1.5, lat: 52.5 };
   const defaultZoom = 7;
 
-  // Initialize map only once
   useEffect(() => {
-    if (map.current) return; // Prevent re-initialization
+    if (!MAPBOX_TOKEN || !mapContainer.current) {
+      setLoading(false);
+      return;
+    }
+    if (map.current) return;
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: mapStyle,
-      center: [defaultCenter.lng, defaultCenter.lat],
-      zoom: defaultZoom,
-    });
-
-    // Add navigation controls
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
-    map.current.addControl(new mapboxgl.FullscreenControl(), "top-right");
-
+    const container = mapContainer.current;
     let moveendHandler = null;
 
-    map.current.on("load", () => {
-      console.log("Map loaded successfully");
-      setMapReady(true);
-      setLoading(false);
-      moveendHandler = () => updateMarkersRef.current?.();
-      map.current.on("moveend", moveendHandler);
+    const createMap = () => {
+      if (map.current) return;
+      if (container.clientWidth <= 0 || container.clientHeight <= 0) return;
+
+      map.current = new mapboxgl.Map({
+        container,
+        style: mapStyle,
+        center: [defaultCenter.lng, defaultCenter.lat],
+        zoom: defaultZoom,
+      });
+
+      map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+      map.current.addControl(new mapboxgl.FullscreenControl(), "top-right");
+
+      map.current.on("error", (e) => {
+        setMapError(e.error?.message ?? "Map failed to load");
+        setLoading(false);
+      });
+
+      map.current.on("load", () => {
+        map.current?.resize();
+        setMapReady(true);
+        setLoading(false);
+        setMapError(null);
+        moveendHandler = () => updateMarkersRef.current?.();
+        map.current.on("moveend", moveendHandler);
+      });
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (!map.current && container.clientWidth > 0 && container.clientHeight > 0) {
+        createMap();
+      }
+      map.current?.resize();
     });
+    resizeObserver.observe(container);
+
+    if (container.clientWidth > 0 && container.clientHeight > 0) {
+      createMap();
+    }
 
     return () => {
+      resizeObserver.disconnect();
       if (map.current) {
         if (moveendHandler) {
           map.current.off("moveend", moveendHandler);
@@ -145,10 +174,17 @@ function Map() {
     }
   };
 
+  const hasValidCoords = (location) => {
+    const { longitude, latitude } = location?.coordinates ?? {};
+    return Number.isFinite(longitude) && Number.isFinite(latitude);
+  };
+
   const fitMapToBounds = (locs) => {
     if (!map.current) return;
 
-    const allLocations = [...locs.careGivers, ...locs.careReceivers];
+    const allLocations = [...locs.careGivers, ...locs.careReceivers].filter(
+      hasValidCoords
+    );
 
     if (allLocations.length === 0) return;
 
@@ -184,9 +220,8 @@ function Map() {
     });
     markers.current = [];
 
-    // Add care giver markers
     if (filters.showCareGivers) {
-      locations.careGivers.forEach((cg) => {
+      locations.careGivers.filter(hasValidCoords).forEach((cg) => {
         try {
           const el = createMarkerElement("caregiver");
 
@@ -206,9 +241,8 @@ function Map() {
       });
     }
 
-    // Add care receiver markers
     if (filters.showCareReceivers) {
-      locations.careReceivers.forEach((cr) => {
+      locations.careReceivers.filter(hasValidCoords).forEach((cr) => {
         try {
           const el = createMarkerElement("carereceiver");
 
@@ -315,6 +349,24 @@ function Map() {
     loadLocations(true);
   };
 
+  const handleRegeocode = async () => {
+    setRegeocoding(true);
+    try {
+      const res = await api.post("/map/regeocode");
+      const d = res.data?.data ?? {};
+      const cg = d.careGiversUpdated ?? 0;
+      const cr = d.careReceiversUpdated ?? 0;
+      toast.success(`Updated ${cg} care givers, ${cr} care receivers`);
+      loadLocations(true);
+    } catch (err) {
+      toast.error(
+        err.response?.data?.error?.message ?? "Failed to fix map locations"
+      );
+    } finally {
+      setRegeocoding(false);
+    }
+  };
+
   const handleFitBounds = () => {
     if (locations.careGivers.length > 0 || locations.careReceivers.length > 0) {
       fitMapToBounds(locations);
@@ -327,6 +379,9 @@ function Map() {
     if (map.current) {
       map.current.setStyle(style);
       setMapStyle(style);
+      map.current.once("idle", () => {
+        updateMarkersRef.current?.();
+      });
     }
   };
 
@@ -378,6 +433,18 @@ function Map() {
               >
                 <Maximize2 className="h-5 w-5" />
                 Fit All
+              </button>
+
+              <button
+                onClick={handleRegeocode}
+                disabled={regeocoding}
+                className="btn-secondary flex items-center gap-2"
+                title="Re-geocode all addresses to fix map pins"
+              >
+                <MapPin
+                  className={`h-5 w-5 ${regeocoding ? "animate-pulse" : ""}`}
+                />
+                {regeocoding ? "Fixing locations…" : "Re-geocode addresses"}
               </button>
 
               <button
@@ -583,8 +650,8 @@ function Map() {
         </div>
 
         {/* Map Container */}
-        <div className="flex-1 relative">
-          <div ref={mapContainer} className="absolute inset-0" />
+        <div className="flex-1 relative min-h-0">
+          <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
 
           {loading && (
             <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
@@ -595,7 +662,33 @@ function Map() {
             </div>
           )}
 
-          {!loading && stats.total === 0 && (
+          {!MAPBOX_TOKEN && !loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+              <div className="bg-white rounded-lg shadow-lg p-8 text-center max-w-md border border-gray-200">
+                <MapPin className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+                <h3 className="text-xl font-semibold mb-2 text-gray-800">
+                  Mapbox token not configured
+                </h3>
+                <p className="text-gray-600">
+                  Set <code className="text-sm bg-gray-100 px-1 rounded">VITE_MAPBOX_ACCESS_TOKEN</code> in your environment to load the map.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {mapError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-90 z-10">
+              <div className="bg-white rounded-lg shadow-lg p-8 text-center max-w-md border border-red-200">
+                <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-500" />
+                <h3 className="text-xl font-semibold mb-2 text-gray-800">
+                  Map failed to load
+                </h3>
+                <p className="text-gray-600 text-sm">{mapError}</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && MAPBOX_TOKEN && !mapError && stats.total === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="bg-white rounded-lg shadow-lg p-8 text-center max-w-md">
                 <AlertCircle className="h-16 w-16 mx-auto mb-4 text-gray-400" />

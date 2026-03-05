@@ -65,6 +65,7 @@ function CareReceiverForm() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedVisits, setExpandedVisits] = useState({});
+  const [durationRawByIndex, setDurationRawByIndex] = useState({});
   const [addressErrors, setAddressErrors] = useState({ street: "", city: "", postcode: "" });
   const [postcodeStatus, setPostcodeStatus] = useState(null); // null | 'validating' | 'valid' | 'invalid'
   const notesTextareaRef = useRef(null);
@@ -724,13 +725,22 @@ function CareReceiverForm() {
                         <input
                           id={`visit-${index}-duration`}
                           type="number"
-                          value={visit.duration}
+                          value={durationRawByIndex[index] !== undefined ? durationRawByIndex[index] : visit.duration}
                           onChange={(e) => {
-                            const v = parseInt(e.target.value, 10);
-                            const clamped = Number.isNaN(v)
+                            setDurationRawByIndex((prev) => ({ ...prev, [index]: e.target.value }));
+                          }}
+                          onBlur={(e) => {
+                            const raw = e.target.value;
+                            const v = parseInt(raw, 10);
+                            const clamped = Number.isNaN(v) || raw === ""
                               ? 15
                               : Math.min(240, Math.max(15, v));
                             updateDailyVisit(index, "duration", clamped);
+                            setDurationRawByIndex((prev) => {
+                              const next = { ...prev };
+                              delete next[index];
+                              return next;
+                            });
                           }}
                           min="15"
                           max="240"
