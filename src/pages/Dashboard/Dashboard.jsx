@@ -38,7 +38,7 @@ function monthRange() {
   return {
     start: new Date(now.getFullYear(), now.getMonth(), 1),
     end:   new Date(now.getFullYear(), now.getMonth() + 1, 0),
-    label: now.toLocaleString("default", { month: "long", year: "numeric" }),
+    label: now.toLocaleString("en-GB", { month: "long", year: "numeric" }),
   };
 }
 

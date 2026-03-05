@@ -12,7 +12,7 @@ const skillOptions = [
   { value: 'meal_preparation', label: 'Meal Preparation' },
   { value: 'companionship', label: 'Companionship' },
   { value: 'household_tasks', label: 'Household Tasks' },
-  { value: 'specialized_medical', label: 'Specialized Medical' },
+  { value: 'specialized_medical', label: 'Specialised Medical' },
 ];
 
 function CareGiverForm() {
