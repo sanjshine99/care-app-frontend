@@ -103,6 +103,8 @@ export function ScheduleGenerationProvider({ children }) {
                     error: null,
                   };
                   finishWithPayload(payload);
+                  queryClient.invalidateQueries({ queryKey: ["appointments"] });
+                  queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
                   const scheduled = payload.summary.totalScheduled;
                   const failed = payload.summary.totalFailed;
                   toast.success(
@@ -171,6 +173,8 @@ export function ScheduleGenerationProvider({ children }) {
             error: null,
           };
           finishWithPayload(payload);
+          queryClient.invalidateQueries({ queryKey: ["appointments"] });
+          queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
           const scheduled = payload.summary.totalScheduled;
           const failed = payload.summary.totalFailed;
           toast.success(
