@@ -18,6 +18,126 @@ import { toast } from "react-toastify";
 import api from "../../services/api";
 import { getSkillLabel } from "../../constants/skills";
 
+function UnavailableCareGiverCard({
+  careGiver,
+  reason,
+  visit,
+  careReceiver,
+  isPrimarySelected,
+  isSecondarySelected,
+  onSelectPrimary,
+  onSelectSecondary,
+  selectedCareGiverId,
+  getSkillLabel,
+}) {
+  const isSelected = isPrimarySelected || isSecondarySelected;
+  const requirements = visit.requirements || [];
+  const normalizedCGSkills = (careGiver.skills || []).map((s) =>
+    s.toLowerCase().replace(/ /g, "_"),
+  );
+  const normalizedRequirements = requirements.map((r) =>
+    r.toLowerCase().replace(/ /g, "_"),
+  );
+
+  return (
+    <div
+      className={`border rounded-lg p-4 cursor-pointer transition-all ${
+        isSelected
+          ? "border-primary-500 bg-primary-50 shadow-md"
+          : "border-amber-200 bg-amber-50/50 hover:border-amber-300 hover:bg-amber-50"
+      }`}
+    >
+      <div className="flex items-start gap-4">
+        <div className="flex flex-col gap-2 pt-1">
+          {!visit.doubleHanded ? (
+            <input
+              type="radio"
+              name="careGiverUnavailable"
+              checked={isPrimarySelected}
+              onChange={onSelectPrimary}
+              className="mt-1"
+            />
+          ) : (
+            <>
+              <label className="flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="radio"
+                  name="primaryCareGiverUnavailable"
+                  checked={isPrimarySelected}
+                  onChange={onSelectPrimary}
+                />
+                Primary
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="radio"
+                  name="secondaryCareGiverUnavailable"
+                  checked={isSecondarySelected}
+                  onChange={onSelectSecondary}
+                  disabled={selectedCareGiverId === careGiver._id}
+                />
+                Secondary
+              </label>
+            </>
+          )}
+        </div>
+        <div className="flex-1">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <h4 className="font-semibold text-lg">{careGiver.name}</h4>
+              <p className="text-sm text-gray-600">{careGiver.email}</p>
+              {careGiver.phone && (
+                <p className="text-sm text-gray-600">{careGiver.phone}</p>
+              )}
+            </div>
+            <span className="flex-shrink-0 px-2 py-1 bg-amber-200 text-amber-900 text-xs font-medium rounded">
+              {reason}
+            </span>
+          </div>
+          {(careGiver.skills || []).length > 0 && (
+            <div className="mb-2">
+              <p className="text-xs text-gray-600 mb-1">Skills:</p>
+              <div className="flex flex-wrap gap-1">
+                {careGiver.skills.map((skill, idx) => {
+                  const normalizedSkill = skill.toLowerCase().replace(/ /g, "_");
+                  const isRequired = normalizedRequirements.includes(normalizedSkill);
+                  return (
+                    <span
+                      key={idx}
+                      className={`px-2 py-1 text-xs rounded ${
+                        isRequired ? "bg-green-100 text-green-800 font-medium" : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {getSkillLabel(skill)}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-4 text-sm flex-wrap">
+            {careGiver.gender && (
+              <div className="flex items-center gap-1 text-gray-600">
+                <User className="h-4 w-4" />
+                <span>{careGiver.gender}</span>
+              </div>
+            )}
+            {careGiver.distance != null && (
+              <div className="flex items-center gap-1 text-gray-600">
+                <MapPin className="h-4 w-4" />
+                <span>{careGiver.distance.toFixed(1)} km</span>
+              </div>
+            )}
+            {careGiver.address?.city && (
+              <span className="text-xs text-gray-500">{careGiver.address.city}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ManualScheduleModal({
   careReceiver: initialCareReceiver,
   visit: initialVisit,
@@ -28,6 +148,7 @@ function ManualScheduleModal({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [availableCareGivers, setAvailableCareGivers] = useState([]);
+  const [unavailableCareGivers, setUnavailableCareGivers] = useState([]);
   const [careReceiver, setCareReceiver] = useState(initialCareReceiver);
   const [visit, setVisit] = useState(initialVisit);
   const [selectedCareGiver, setSelectedCareGiver] = useState(null);
@@ -112,25 +233,28 @@ function ManualScheduleModal({
 
       if (response.data.success) {
         const careGivers = response.data.data.availableCareGivers || [];
-        console.log(`Found ${careGivers.length} available care givers`);
+        const unavailable = response.data.data.unavailableCareGivers || [];
+        console.log(`Found ${careGivers.length} available, ${unavailable.length} unavailable care givers`);
 
         setAvailableCareGivers(careGivers);
+        setUnavailableCareGivers(unavailable);
         setLastRefreshed(new Date());
 
-        if (careGivers.length === 0) {
+        if (careGivers.length === 0 && unavailable.length === 0) {
           setError(
-            "No available care givers found. This could be because:\n" +
-              "• No care givers have the required skills\n" +
-              "• All care givers are busy at this time\n" +
-              "• Care givers are on time off\n" +
-              "• Care givers are not working on this day\n\n" +
-              "Try refreshing or check care giver availability.",
+            "No care givers in the system or none could be evaluated. Try refreshing or check care giver data.",
           );
+        } else if (careGivers.length === 0 && unavailable.length > 0) {
+          setError(null);
         }
 
         if (showToast) {
           toast.success(
-            ` Refreshed! Found ${careGivers.length} available care givers`,
+            careGivers.length > 0
+              ? `Refreshed! Found ${careGivers.length} available care givers`
+              : unavailable.length > 0
+                ? `Refreshed! ${unavailable.length} care giver(s) with constraints – you can still assign if needed`
+                : "Refreshed.",
           );
         }
       }
@@ -290,6 +414,15 @@ function ManualScheduleModal({
     }))
     .sort((a, b) => b.matchData.score - a.matchData.score);
 
+  const selectedUnavailableEntry = unavailableCareGivers.find(
+    (e) => e.careGiver._id === selectedCareGiver?._id,
+  );
+  const selectedSecondaryUnavailableEntry = unavailableCareGivers.find(
+    (e) => e.careGiver._id === selectedSecondaryCareGiver?._id,
+  );
+  const isForceAssign =
+    selectedUnavailableEntry || selectedSecondaryUnavailableEntry;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 max-w-6xl w-full max-h-[90vh] overflow-y-auto">
@@ -410,11 +543,15 @@ function ManualScheduleModal({
           )}
         </div>
 
-        {/* Available Care Givers */}
+        {/* Care Givers */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-semibold text-lg">
-              Available Care Givers ({availableCareGivers.length})
+              {availableCareGivers.length > 0
+                ? `Available Care Givers (${availableCareGivers.length})`
+                : unavailableCareGivers.length > 0
+                  ? "Care givers (with constraints)"
+                  : "Care Givers"}
             </h3>
             {!loading && !refreshing && (
               <button
@@ -456,33 +593,10 @@ function ManualScheduleModal({
                 Refresh All Data
               </button>
             </div>
-          ) : availableCareGivers.length === 0 ? (
-            <div className="text-center py-8 bg-gray-50 rounded-lg">
-              <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-600 mb-2 font-medium">
-                No available care givers found
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                Possible reasons:
-                <br />
-                • Care givers don't have required skills
-                <br />
-                • Care givers are not working at this time
-                <br />
-                • Care givers are on time off
-                <br />• All care givers have conflicting appointments
-              </p>
-              <button
-                onClick={handleRefresh}
-                className="btn-secondary flex items-center gap-2 mx-auto"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh All Data
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {rankedCareGivers.map((careGiver) => {
+          ) : availableCareGivers.length > 0 ? (
+            <>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {rankedCareGivers.map((careGiver) => {
                 const isPrimarySelected =
                   selectedCareGiver?._id === careGiver._id;
                 const isSecondarySelected =
@@ -702,38 +816,113 @@ function ManualScheduleModal({
                   </div>
                 );
               })}
+              </div>
+              {unavailableCareGivers.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                    Other care givers (not recommended)
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-3">
+                    You can still assign these if needed.
+                  </p>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {unavailableCareGivers.map(({ careGiver, reason }) => (
+                      <UnavailableCareGiverCard
+                        key={careGiver._id}
+                        careGiver={careGiver}
+                        reason={reason}
+                        visit={visit}
+                        careReceiver={careReceiver}
+                        isPrimarySelected={selectedCareGiver?._id === careGiver._id}
+                        isSecondarySelected={selectedSecondaryCareGiver?._id === careGiver._id}
+                        onSelectPrimary={() => setSelectedCareGiver(careGiver)}
+                        onSelectSecondary={() => setSelectedSecondaryCareGiver(careGiver)}
+                        selectedCareGiverId={selectedCareGiver?._id}
+                        getSkillLabel={getSkillLabel}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : unavailableCareGivers.length > 0 ? (
+            <div className="space-y-3 max-h-[28rem] overflow-y-auto">
+              <p className="text-sm text-gray-600 mb-3">
+                None fully suitable. Select a care giver below to force-assign if required.
+              </p>
+              {unavailableCareGivers.map(({ careGiver, reason }) => (
+                <UnavailableCareGiverCard
+                  key={careGiver._id}
+                  careGiver={careGiver}
+                  reason={reason}
+                  visit={visit}
+                  careReceiver={careReceiver}
+                  isPrimarySelected={selectedCareGiver?._id === careGiver._id}
+                  isSecondarySelected={selectedSecondaryCareGiver?._id === careGiver._id}
+                  onSelectPrimary={() => setSelectedCareGiver(careGiver)}
+                  onSelectSecondary={() => setSelectedSecondaryCareGiver(careGiver)}
+                  selectedCareGiverId={selectedCareGiver?._id}
+                  getSkillLabel={getSkillLabel}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-gray-50 rounded-lg">
+              <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+              <p className="text-gray-600 mb-2 font-medium">
+                No care givers found
+              </p>
+              <button
+                onClick={handleRefresh}
+                className="btn-secondary flex items-center gap-2 mx-auto"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh All Data
+              </button>
             </div>
           )}
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between items-center pt-4 border-t">
-          <button
-            onClick={handleRefresh}
-            disabled={loading || refreshing || scheduling}
-            className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh All Data
-          </button>
-
-          <div className="flex gap-3">
+        <div className="flex flex-col gap-3 pt-4 border-t">
+          {isForceAssign && (selectedUnavailableEntry || selectedSecondaryUnavailableEntry) && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <span>
+                You are assigning a care giver who does not meet the usual criteria
+                {selectedUnavailableEntry && `: ${selectedUnavailableEntry.reason}`}
+                {selectedSecondaryUnavailableEntry && selectedUnavailableEntry !== selectedSecondaryUnavailableEntry && `; secondary: ${selectedSecondaryUnavailableEntry.reason}`}.
+                Schedule anyway if this is intentional.
+              </span>
+            </div>
+          )}
+          <div className="flex justify-between items-center">
             <button
-              onClick={onClose}
-              className="btn-secondary"
-              disabled={scheduling}
+              onClick={handleRefresh}
+              disabled={loading || refreshing || scheduling}
+              className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
             >
-              Cancel
+              <RefreshCw className="h-4 w-4" />
+              Refresh All Data
             </button>
-            <button
-              onClick={handleSchedule}
-              disabled={
-                scheduling ||
-                !selectedCareGiver ||
-                (visit.doubleHanded && !selectedSecondaryCareGiver)
-              }
-              className="btn-primary flex items-center gap-2"
-            >
+
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="btn-secondary"
+                disabled={scheduling}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSchedule}
+                disabled={
+                  scheduling ||
+                  !selectedCareGiver ||
+                  (visit.doubleHanded && !selectedSecondaryCareGiver)
+                }
+                className="btn-primary flex items-center gap-2"
+              >
               {scheduling ? (
                 <>
                   <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
@@ -746,6 +935,7 @@ function ManualScheduleModal({
                 </>
               )}
             </button>
+          </div>
           </div>
         </div>
       </div>
