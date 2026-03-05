@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Save, ArrowLeft, Plus, Trash2, Clock, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { Save, ArrowLeft, Plus, Trash2, Clock, Calendar, ChevronDown, ChevronUp, Check, X } from "lucide-react";
 import { careReceiverService } from "../../services/careReceiverService";
 
 const SKILLS = [
@@ -15,7 +15,7 @@ const SKILLS = [
   { value: "meal_preparation", label: "Meal Preparation" },
   { value: "companionship", label: "Companionship" },
   { value: "household_tasks", label: "Household Tasks" },
-  { value: "specialized_medical", label: "Specialized Medical" },
+  { value: "specialized_medical", label: "Specialised Medical" },
 ];
 
 const RELATIONSHIPS = [
@@ -598,10 +598,10 @@ function CareReceiverForm() {
                         <div className="animate-spin h-4 w-4 border-2 border-primary-600 border-t-transparent rounded-full" />
                       )}
                       {postcodeStatus === "valid" && (
-                        <span className="text-green-500 font-bold text-sm">✓</span>
+                        <Check className="h-4 w-4 text-green-500" />
                       )}
                       {postcodeStatus === "invalid" && (
-                        <span className="text-red-500 font-bold text-sm">✗</span>
+                        <X className="h-4 w-4 text-red-500" />
                       )}
                     </div>
                   </div>

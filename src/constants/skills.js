@@ -6,7 +6,7 @@ export const SKILL_OPTIONS = [
   { value: "meal_preparation", label: "Meal Preparation" },
   { value: "companionship", label: "Companionship" },
   { value: "household_tasks", label: "Household Tasks" },
-  { value: "specialized_medical", label: "Specialized Medical" },
+  { value: "specialized_medical", label: "Specialised Medical" },
 ];
 
 const SKILL_LABELS = Object.fromEntries(

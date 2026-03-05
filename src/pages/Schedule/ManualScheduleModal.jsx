@@ -12,6 +12,7 @@ import {
   Users,
   RefreshCw,
   Clock,
+  Check,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import api from "../../services/api";
@@ -44,7 +45,7 @@ function ManualScheduleModal({
     try {
       if (showToast) {
         setRefreshing(true);
-        toast.info("🔄 Refreshing all data...");
+        toast.info("Refreshing all data...");
       } else {
         setLoading(true);
       }
@@ -332,8 +333,8 @@ function ManualScheduleModal({
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div className="flex justify-between items-start mb-3">
             <h3 className="font-semibold text-lg">Appointment Details</h3>
-            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
-              ✓ Fresh Data
+            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded inline-flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" /> Fresh Data
             </span>
           </div>
 
@@ -610,7 +611,7 @@ function ManualScheduleModal({
                                       : "bg-gray-100 text-gray-600"
                                   }`}
                                 >
-                                  {isRequired && "✓ "}
+                                  {isRequired && <Check className="h-3 w-3 inline mr-0.5" />}
                                   {getSkillLabel(skill)}
                                 </span>
                               );
@@ -663,20 +664,27 @@ function ManualScheduleModal({
                         {/* Match Reasons */}
                         <div className="mt-2">
                           <div className="flex flex-wrap gap-1">
-                            {careGiver.matchData.reasons.map((reason, idx) => (
-                              <span
-                                key={idx}
-                                className={`text-xs px-2 py-1 rounded ${
-                                  reason.startsWith("✓")
-                                    ? "bg-green-50 text-green-700"
-                                    : reason.startsWith("✗")
-                                      ? "bg-orange-50 text-orange-700"
-                                      : "bg-blue-50 text-blue-700"
-                                }`}
-                              >
-                                {reason}
-                              </span>
-                            ))}
+                            {careGiver.matchData.reasons.map((reason, idx) => {
+                              const isPass = reason.startsWith("✓");
+                              const isFail = reason.startsWith("✗");
+                              const text = isPass || isFail ? reason.slice(2) : reason;
+                              return (
+                                <span
+                                  key={idx}
+                                  className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
+                                    isPass
+                                      ? "bg-green-50 text-green-700"
+                                      : isFail
+                                        ? "bg-orange-50 text-orange-700"
+                                        : "bg-blue-50 text-blue-700"
+                                  }`}
+                                >
+                                  {isPass && <Check className="h-3 w-3 flex-shrink-0" />}
+                                  {isFail && <X className="h-3 w-3 flex-shrink-0" />}
+                                  {text}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
 
