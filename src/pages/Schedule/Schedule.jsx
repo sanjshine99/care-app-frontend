@@ -114,13 +114,7 @@ function Schedule() {
   // ========================================
   useEffect(() => {
     if (activeTab === "unscheduled") {
-      if (
-        !lastCheck ||
-        lastCheck.startDate !== currentStartDate ||
-        lastCheck.endDate !== currentEndDate
-      ) {
-        runCheck(currentStartDate, currentEndDate);
-      }
+      runCheck(currentStartDate, currentEndDate);
     }
   }, [activeTab, currentStartDate, currentEndDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -130,6 +124,11 @@ function Schedule() {
       queryKey: ["needs-reassignment", currentStartDate, currentEndDate],
     });
   }, [currentStartDate, currentEndDate]);
+
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
+  }, []);
 
   // ========================================
   // VALIDATE SCHEDULE - DETECT CONFLICTS
