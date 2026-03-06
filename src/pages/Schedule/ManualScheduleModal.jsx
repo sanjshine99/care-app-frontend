@@ -1,7 +1,7 @@
 // frontend/src/pages/Schedule/ManualScheduleModal.jsx
 // COMPLETE - Always fetches fresh data (skills, availability, address, coordinates, everything!)
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   X,
   User,
@@ -158,11 +158,16 @@ function ManualScheduleModal({
   const [error, setError] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
 
+  const abortRef = useRef(null);
+
   useEffect(() => {
-    loadAllFreshData();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    loadAllFreshData(false, controller.signal);
+    return () => controller.abort();
   }, []);
 
-  const loadAllFreshData = async (showToast = false) => {
+  const loadAllFreshData = async (showToast = false, signal = null) => {
     try {
       if (showToast) {
         setRefreshing(true);
@@ -182,6 +187,7 @@ function ManualScheduleModal({
       console.log("\n--- Fetching FRESH care receiver data ---");
       const crResponse = await api.get(
         `/schedule/care-receiver/${careReceiver.id}/fresh`,
+        { signal },
       );
 
       if (crResponse.data.success) {
@@ -212,7 +218,7 @@ function ManualScheduleModal({
         .split(":")
         .map(Number);
       const endMinutes = minutes + currentVisit.duration;
-      const endTime = `${hours + Math.floor(endMinutes / 60)}:${(endMinutes % 60).toString().padStart(2, "0")}`;
+      const endTime = `${String(hours + Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 
       console.log("\n--- Searching for available care givers ---");
       console.log("Requirements:", currentVisit.requirements);
@@ -227,7 +233,7 @@ function ManualScheduleModal({
         endTime,
         requirements: currentVisit.requirements || [],
         doubleHanded: currentVisit.doubleHanded || false,
-      });
+      }, { signal });
 
       console.log("Available care givers response:", response.data);
 
@@ -259,6 +265,7 @@ function ManualScheduleModal({
         }
       }
     } catch (error) {
+      if (error.name === "CanceledError" || error.name === "AbortError") return;
       console.error("Error loading fresh data:", error);
       const message =
         error.response?.data?.error?.message || "Failed to load data";
@@ -295,7 +302,7 @@ function ManualScheduleModal({
 
       const [hours, minutes] = visit.preferredTime.split(":").map(Number);
       const endMinutes = minutes + visit.duration;
-      const endTime = `${hours + Math.floor(endMinutes / 60)}:${(endMinutes % 60).toString().padStart(2, "0")}`;
+      const endTime = `${String(hours + Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 
       await api.post("/schedule/appointments/manual", {
         careReceiverId: careReceiver.id,

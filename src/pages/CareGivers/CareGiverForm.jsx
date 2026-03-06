@@ -185,8 +185,19 @@ function CareGiverForm() {
       setSaving(true);
       
       if (isEdit) {
-        await careGiverService.update(id, formData);
-        toast.success('Care giver updated successfully');
+        const response = await careGiverService.update(id, formData);
+        let message = 'Care giver updated successfully.';
+        const details = [];
+        if (response.revalidation?.invalidatedCount > 0) {
+          details.push(`${response.revalidation.invalidatedCount} appointment(s) need reassignment`);
+        }
+        if (response.autoAssign?.assignedCount > 0) {
+          details.push(`${response.autoAssign.assignedCount} unscheduled appointment(s) auto-assigned`);
+        }
+        if (details.length > 0) {
+          message += ' ' + details.join('. ') + '.';
+        }
+        toast.success(message, { autoClose: details.length > 0 ? 8000 : 3000 });
       } else {
         await careGiverService.create(formData);
         toast.success('Care giver created successfully');

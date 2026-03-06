@@ -71,12 +71,19 @@ function NeedsReassignment({ appointments, onReassignSuccess, loading }) {
         );
       } catch (error) {
         console.error("Error cancelling old appointment:", error);
+        toast.error(
+          "New appointment created but failed to cancel the old one. Please cancel it manually.",
+        );
+        setShowReassignModal(false);
+        setSelectedAppointment(null);
+        if (onReassignSuccess) onReassignSuccess();
+        return;
       }
     }
 
     setShowReassignModal(false);
     setSelectedAppointment(null);
-    toast.success(" Appointment reassigned successfully!");
+    toast.success("Appointment reassigned successfully!");
 
     if (onReassignSuccess) onReassignSuccess();
   };

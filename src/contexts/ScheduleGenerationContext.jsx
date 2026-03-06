@@ -48,10 +48,16 @@ function saveToStorage(value) {
 export function ScheduleGenerationProvider({ children }) {
   const [lastGeneration, setLastGeneration] = useState(loadFromStorage);
   const [isGenerating, setIsGenerating] = useState(false);
+  const mountedRef = useRef(true);
+  const pollTimerRef = useRef(null);
 
   useEffect(() => {
     const stored = loadFromStorage();
     if (stored) setLastGeneration(stored);
+    return () => {
+      mountedRef.current = false;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
   }, []);
 
   const runGeneration = (careReceiverIds, startDate, endDate) => {
@@ -63,8 +69,9 @@ export function ScheduleGenerationProvider({ children }) {
     setIsGenerating(true);
 
     const finishWithPayload = (payload) => {
-      setLastGeneration(payload);
       saveToStorage(payload);
+      if (!mountedRef.current) return;
+      setLastGeneration(payload);
       setIsGenerating(false);
     };
 
@@ -132,7 +139,9 @@ export function ScheduleGenerationProvider({ children }) {
                   });
                   return;
                 }
-                setTimeout(pollJob, POLL_INTERVAL_MS);
+                if (mountedRef.current) {
+                  pollTimerRef.current = setTimeout(pollJob, POLL_INTERVAL_MS);
+                }
               })
               .catch((err) => {
                 const message =
@@ -316,8 +325,8 @@ function ScheduleSocketSync() {
     };
 
     const invalidateAndRunCheck = (startDate, endDate) => {
-      queryClient.invalidateQueries({ queryKey: ["appointments"] });
-      queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
+      queryClient.refetchQueries({ queryKey: ["appointments"] });
+      queryClient.refetchQueries({ queryKey: ["needs-reassignment"] });
       if (startDate && endDate) {
         runCheck(startDate, endDate, { silent: true });
       }

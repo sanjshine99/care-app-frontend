@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "react-toastify";
 import api from "../services/api";
 
@@ -43,6 +43,7 @@ function saveToStorage(lastCheck) {
 export function UnscheduledCheckProvider({ children }) {
   const [lastCheck, setLastCheck] = useState(loadFromStorage);
   const [isChecking, setIsChecking] = useState(false);
+  const isCheckingRef = useRef(false);
 
   useEffect(() => {
     const stored = loadFromStorage();
@@ -50,7 +51,8 @@ export function UnscheduledCheckProvider({ children }) {
   }, []);
 
   const runCheck = useCallback((startDate, endDate, options = {}) => {
-    if (isChecking) return;
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
     setIsChecking(true);
     const silent = options.silent === true;
 
@@ -95,9 +97,10 @@ export function UnscheduledCheckProvider({ children }) {
         }
       })
       .finally(() => {
+        isCheckingRef.current = false;
         setIsChecking(false);
       });
-  }, [isChecking]);
+  }, []);
 
   const value = {
     lastCheck,

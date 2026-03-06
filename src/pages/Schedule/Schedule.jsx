@@ -47,7 +47,7 @@ const formatDateForAPI = (date) => {
 
 function Schedule() {
   const navigate = useNavigate();
-  const { lastCheck, isChecking, runCheck } = useUnscheduledCheck();
+  const { lastCheck, isChecking, runCheck, clearLastCheck } = useUnscheduledCheck();
   const [validating, setValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("calendar");
   const [dateRange, setDateRange] = useState(() => ({
@@ -59,12 +59,10 @@ function Schedule() {
   const currentEndDate = formatDateForAPI(dateRange.end);
 
   const lastCheckMatchesRange =
-    lastCheck &&
-    lastCheck.startDate === currentStartDate &&
-    lastCheck.endDate === currentEndDate;
-  const unscheduled = lastCheckMatchesRange ? (lastCheck?.data?.unscheduled ?? []) : [];
-  const schedulingInProgress = lastCheckMatchesRange ? (lastCheck?.data?.schedulingInProgress ?? []) : [];
-  const unscheduledLoading = isChecking;
+    lastCheck && lastCheck.startDate === currentStartDate && lastCheck.endDate === currentEndDate;
+  const unscheduled = lastCheck?.data?.unscheduled ?? [];
+  const schedulingInProgress = lastCheck?.data?.schedulingInProgress ?? [];
+  const unscheduledLoading = isChecking || !lastCheckMatchesRange;
 
   // ========================================
   // FETCH APPOINTMENTS via React Query
@@ -126,9 +124,9 @@ function Schedule() {
   }, [currentStartDate, currentEndDate]);
 
   useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: ["appointments"] });
-    queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
-  }, []);
+    queryClient.invalidateQueries({ queryKey: ["appointments", currentStartDate, currentEndDate] });
+    queryClient.invalidateQueries({ queryKey: ["needs-reassignment", currentStartDate, currentEndDate] });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ========================================
   // VALIDATE SCHEDULE - DETECT CONFLICTS
@@ -143,15 +141,29 @@ function Schedule() {
 
       if (response.data.success) {
         const { summary } = response.data.data;
-        if (summary.invalid > 0) {
-          toast.warning(
-            `Found ${summary.invalid} appointment${summary.invalid !== 1 ? "s" : ""} with conflicts`,
-            { autoClose: 5000 },
-          );
-          invalidateSchedule();
-          if (activeTab !== "needs_reassignment") {
-            setActiveTab("needs_reassignment");
+        const hasConflicts = summary.invalid > 0;
+        const hasAutoAssigned = (summary.autoAssigned || 0) > 0;
+
+        if (hasConflicts || hasAutoAssigned) {
+          let msg = "";
+          if (hasConflicts) {
+            msg += `${summary.invalid} appointment${summary.invalid !== 1 ? "s" : ""} with conflicts`;
           }
+          if (hasAutoAssigned) {
+            if (msg) msg += ". ";
+            msg += `${summary.autoAssigned} appointment(s) auto-assigned`;
+          }
+
+          const remainingInvalid = summary.invalid - (summary.autoAssigned || 0);
+          if (remainingInvalid > 0) {
+            toast.warning(msg, { autoClose: 6000 });
+            if (activeTab !== "needs_reassignment") {
+              setActiveTab("needs_reassignment");
+            }
+          } else {
+            toast.success(msg, { autoClose: 5000 });
+          }
+          invalidateSchedule();
         } else {
           toast.success("All appointments are valid - no conflicts detected!");
         }
@@ -176,11 +188,10 @@ function Schedule() {
 
   const handleManualScheduleSuccess = useCallback(() => {
     invalidateSchedule();
+    clearLastCheck();
     toast.success("Appointment scheduled! Refreshing...");
-    if (activeTab === "unscheduled") {
-      runCheck(currentStartDate, currentEndDate);
-    }
-  }, [invalidateSchedule, activeTab, currentStartDate, currentEndDate, runCheck]);
+    runCheck(currentStartDate, currentEndDate, { silent: activeTab !== "unscheduled" });
+  }, [invalidateSchedule, clearLastCheck, activeTab, currentStartDate, currentEndDate, runCheck]);
 
   const handleQuickRange = (range) => {
     let start, end;
@@ -242,15 +253,9 @@ function Schedule() {
   const getQuickRangeForRange = (startDate, endDate) => {
     const start = moment(startDate);
     const end = moment(endDate);
-    if (
-      start.isSame(moment().startOf("day"), "day") &&
-      end.isSame(moment().endOf("day"), "day")
-    )
+    if (start.isSame(moment().startOf("day"), "day") && end.isSame(moment().endOf("day"), "day"))
       return "today";
-    if (
-      start.isSame(moment().startOf("week"), "day") &&
-      end.isSame(moment().endOf("week"), "day")
-    )
+    if (start.isSame(moment().startOf("week"), "day") && end.isSame(moment().endOf("week"), "day"))
       return "this_week";
     if (
       start.isSame(moment().startOf("month"), "day") &&
@@ -453,10 +458,9 @@ function Schedule() {
 
           <div className="mt-3 text-sm text-gray-600">
             <p>
-              Showing:{" "}
-              <strong>{moment(dateRange.start).format("MMM D, YYYY")}</strong> to{" "}
-              <strong>{moment(dateRange.end).format("MMM D, YYYY")}</strong> (
-              {appointments.length} appointments)
+              Showing: <strong>{moment(dateRange.start).format("MMM D, YYYY")}</strong> to{" "}
+              <strong>{moment(dateRange.end).format("MMM D, YYYY")}</strong> ({appointments.length}{" "}
+              appointments)
             </p>
           </div>
         </div>
@@ -533,9 +537,7 @@ function Schedule() {
                         <h3 className="text-lg font-semibold text-gray-800 mb-2">
                           No Appointments Found
                         </h3>
-                        <p className="text-gray-700 mb-3">
-                          Get started by generating a schedule.
-                        </p>
+                        <p className="text-gray-700 mb-3">Get started by generating a schedule.</p>
                         <button
                           onClick={() => navigate("/schedule/generate")}
                           className="btn-primary flex items-center gap-2"
@@ -563,11 +565,7 @@ function Schedule() {
               <div>
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-6">
                   <div className="flex items-start">
-                    <svg
-                      className="h-5 w-5 text-blue-500"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
+                    <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                       <path
                         fillRule="evenodd"
                         d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
@@ -579,8 +577,8 @@ function Schedule() {
                         Unscheduled Appointments
                       </h3>
                       <p className="text-sm text-blue-700 mt-1">
-                        These appointments need care givers assigned.
-                      </p>
+                        These appointments need caregivers assigned.
+                      </p>{" "}
                     </div>
                   </div>
                 </div>
