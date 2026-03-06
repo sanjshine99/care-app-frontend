@@ -385,6 +385,21 @@ function CareReceiverForm() {
       if (response?.warning) {
         toast.warning(response.warning);
       }
+
+      const revalidation = response?.revalidation;
+      if (revalidation?.invalidatedCount > 0) {
+        const remaining =
+          revalidation.invalidatedCount - (revalidation.reassignedCount || 0);
+        if (remaining > 0) {
+          toast.warning(
+            `${remaining} appointment(s) need reassignment due to profile changes. Check the schedule.`
+          );
+        } else if (revalidation.reassignedCount > 0) {
+          toast.info(
+            `${revalidation.reassignedCount} appointment(s) were automatically reassigned after profile changes.`
+          );
+        }
+      }
     } catch (error) {
       const message =
         error.response?.data?.error?.message || "Failed to save care receiver";
