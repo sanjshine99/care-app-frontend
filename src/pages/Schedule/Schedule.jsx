@@ -22,28 +22,7 @@ import UnscheduledList from "./UnscheduledList";
 import NeedsReassignment from "./NeedsReassignment";
 import api from "../../services/api";
 import { useUnscheduledCheck } from "../../contexts/UnscheduledCheckContext";
-
-// ========================================
-//  FIXED: Date formatting helper to prevent timezone offset bug
-// ========================================
-/**
- * Format date for API calls - prevents timezone offset issues
- *
- * PROBLEM: Using toISOString() converts to UTC, which can shift the date by one day
- * Example: Jan 1, 2026 00:00 in GMT+8 → "2025-12-31T16:00:00Z" → "2025-12-31"
- *
- * SOLUTION: Use local date components without timezone conversion
- * Example: Jan 1, 2026 00:00 in GMT+8 → "2026-01-01"
- */
-const formatDateForAPI = (date) => {
-  if (!date) return "";
-  const d = date instanceof Date ? date : new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-// ========================================
+import { formatDateForAPI } from "../../utils/dateUtils";
 
 function Schedule() {
   const navigate = useNavigate();
@@ -101,7 +80,8 @@ function Schedule() {
           return d?.appointments ?? (Array.isArray(d) ? d : []);
         }),
     enabled: activeTab === "needs_reassignment",
-    staleTime: 2 * 60 * 1000,
+    staleTime: 30 * 1000, // Short stale time — data changes frequently
+    refetchOnWindowFocus: true,
   });
 
   const appointments = appointmentsData ?? [];
@@ -118,9 +98,9 @@ function Schedule() {
 
   const invalidateSchedule = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["appointments", currentStartDate, currentEndDate] });
-    queryClient.invalidateQueries({
-      queryKey: ["needs-reassignment", currentStartDate, currentEndDate],
-    });
+    queryClient.invalidateQueries({ queryKey: ["needs-reassignment", currentStartDate, currentEndDate] });
+    queryClient.invalidateQueries({ queryKey: ["unscheduled"] });
+    queryClient.invalidateQueries({ queryKey: ["scheduleStats"] });
   }, [currentStartDate, currentEndDate]);
 
   useEffect(() => {

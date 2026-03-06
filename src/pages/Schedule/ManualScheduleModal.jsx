@@ -35,9 +35,7 @@ function UnavailableCareGiverCard({
   const normalizedCGSkills = (careGiver.skills || []).map((s) =>
     s.toLowerCase().replace(/ /g, "_"),
   );
-  const normalizedRequirements = requirements.map((r) =>
-    r.toLowerCase().replace(/ /g, "_"),
-  );
+  const normalizedRequirements = requirements.map((r) => r.toLowerCase().replace(/ /g, "_"));
 
   return (
     <div
@@ -86,9 +84,7 @@ function UnavailableCareGiverCard({
             <div>
               <h4 className="font-semibold text-lg">{careGiver.name}</h4>
               <p className="text-sm text-gray-600">{careGiver.email}</p>
-              {careGiver.phone && (
-                <p className="text-sm text-gray-600">{careGiver.phone}</p>
-              )}
+              {careGiver.phone && <p className="text-sm text-gray-600">{careGiver.phone}</p>}
             </div>
             <span className="flex-shrink-0 px-2 py-1 bg-amber-200 text-amber-900 text-xs font-medium rounded">
               {reason}
@@ -105,7 +101,9 @@ function UnavailableCareGiverCard({
                     <span
                       key={idx}
                       className={`px-2 py-1 text-xs rounded ${
-                        isRequired ? "bg-green-100 text-green-800 font-medium" : "bg-gray-100 text-gray-600"
+                        isRequired
+                          ? "bg-green-100 text-green-800 font-medium"
+                          : "bg-gray-100 text-gray-600"
                       }`}
                     >
                       {getSkillLabel(skill)}
@@ -152,8 +150,7 @@ function ManualScheduleModal({
   const [careReceiver, setCareReceiver] = useState(initialCareReceiver);
   const [visit, setVisit] = useState(initialVisit);
   const [selectedCareGiver, setSelectedCareGiver] = useState(null);
-  const [selectedSecondaryCareGiver, setSelectedSecondaryCareGiver] =
-    useState(null);
+  const [selectedSecondaryCareGiver, setSelectedSecondaryCareGiver] = useState(null);
   const [scheduling, setScheduling] = useState(false);
   const [error, setError] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
@@ -185,10 +182,9 @@ function ManualScheduleModal({
 
       // STEP 1: Get FRESH care receiver data from database
       console.log("\n--- Fetching FRESH care receiver data ---");
-      const crResponse = await api.get(
-        `/schedule/care-receiver/${careReceiver.id}/fresh`,
-        { signal },
-      );
+      const crResponse = await api.get(`/schedule/care-receiver/${careReceiver.id}/fresh`, {
+        signal,
+      });
 
       if (crResponse.data.success) {
         const freshCareReceiver = crResponse.data.data.careReceiver;
@@ -214,9 +210,7 @@ function ManualScheduleModal({
 
       // STEP 2: Calculate end time
       const currentVisit = visit; // Use current visit for calculation
-      const [hours, minutes] = currentVisit.preferredTime
-        .split(":")
-        .map(Number);
+      const [hours, minutes] = currentVisit.preferredTime.split(":").map(Number);
       const endMinutes = minutes + currentVisit.duration;
       const endTime = `${String(hours + Math.floor(endMinutes / 60)).padStart(2, "0")}:${String(endMinutes % 60).padStart(2, "0")}`;
 
@@ -226,21 +220,27 @@ function ManualScheduleModal({
       console.log("Double-handed:", currentVisit.doubleHanded);
 
       // STEP 3: Get FRESH available care givers (backend will query database)
-      const response = await api.post("/schedule/find-available", {
-        careReceiverId: careReceiver.id,
-        date,
-        startTime: currentVisit.preferredTime,
-        endTime,
-        requirements: currentVisit.requirements || [],
-        doubleHanded: currentVisit.doubleHanded || false,
-      }, { signal });
+      const response = await api.post(
+        "/schedule/find-available",
+        {
+          careReceiverId: careReceiver.id,
+          date,
+          startTime: currentVisit.preferredTime,
+          endTime,
+          requirements: currentVisit.requirements || [],
+          doubleHanded: currentVisit.doubleHanded || false,
+        },
+        { signal },
+      );
 
       console.log("Available care givers response:", response.data);
 
       if (response.data.success) {
         const careGivers = response.data.data.availableCareGivers || [];
         const unavailable = response.data.data.unavailableCareGivers || [];
-        console.log(`Found ${careGivers.length} available, ${unavailable.length} unavailable care givers`);
+        console.log(
+          `Found ${careGivers.length} available, ${unavailable.length} unavailable care givers`,
+        );
 
         setAvailableCareGivers(careGivers);
         setUnavailableCareGivers(unavailable);
@@ -267,8 +267,7 @@ function ManualScheduleModal({
     } catch (error) {
       if (error.name === "CanceledError" || error.name === "AbortError") return;
       console.error("Error loading fresh data:", error);
-      const message =
-        error.response?.data?.error?.message || "Failed to load data";
+      const message = error.response?.data?.error?.message || "Failed to load data";
       setError(message);
       toast.error(message);
     } finally {
@@ -291,9 +290,7 @@ function ManualScheduleModal({
     }
 
     if (visit.doubleHanded && !selectedSecondaryCareGiver) {
-      toast.error(
-        "Please select a secondary care giver for double-handed care",
-      );
+      toast.error("Please select a secondary care giver for double-handed care");
       return;
     }
 
@@ -307,9 +304,7 @@ function ManualScheduleModal({
       await api.post("/schedule/appointments/manual", {
         careReceiverId: careReceiver.id,
         careGiverId: selectedCareGiver._id,
-        secondaryCareGiverId: visit.doubleHanded
-          ? selectedSecondaryCareGiver._id
-          : undefined,
+        secondaryCareGiverId: visit.doubleHanded ? selectedSecondaryCareGiver._id : undefined,
         date,
         startTime: visit.preferredTime,
         endTime,
@@ -325,9 +320,7 @@ function ManualScheduleModal({
       onSuccess();
     } catch (error) {
       console.error("Scheduling error:", error);
-      const message =
-        error.response?.data?.error?.message ||
-        "Failed to schedule appointment";
+      const message = error.response?.data?.error?.message || "Failed to schedule appointment";
       toast.error(message);
     } finally {
       setScheduling(false);
@@ -345,45 +338,31 @@ function ManualScheduleModal({
       score += 50;
       reasons.push("No specific skills required");
     } else {
-      const normalizedCGSkills = careGiver.skills.map((s) =>
-        s.toLowerCase().replace(/ /g, "_"),
-      );
-      const normalizedRequirements = requirements.map((r) =>
-        r.toLowerCase().replace(/ /g, "_"),
-      );
+      const normalizedCGSkills = careGiver.skills.map((s) => s.toLowerCase().replace(/ /g, "_"));
+      const normalizedRequirements = requirements.map((r) => r.toLowerCase().replace(/ /g, "_"));
 
       const matchingSkills = normalizedRequirements.filter((req) =>
         normalizedCGSkills.includes(req),
       );
 
-      const hasAllSkills =
-        matchingSkills.length === normalizedRequirements.length;
+      const hasAllSkills = matchingSkills.length === normalizedRequirements.length;
 
       if (hasAllSkills) {
         score += 50;
         reasons.push("✓ Has all required skills");
       } else {
         score += (matchingSkills.length / normalizedRequirements.length) * 50;
-        reasons.push(
-          `Has ${matchingSkills.length}/${normalizedRequirements.length} skills`,
-        );
+        reasons.push(`Has ${matchingSkills.length}/${normalizedRequirements.length} skills`);
       }
     }
 
     // Gender preference (30 points)
-    if (
-      careReceiver.genderPreference &&
-      careReceiver.genderPreference !== "No Preference"
-    ) {
+    if (careReceiver.genderPreference && careReceiver.genderPreference !== "No Preference") {
       if (careGiver.gender === careReceiver.genderPreference) {
         score += 30;
-        reasons.push(
-          `✓ Matches gender preference (${careReceiver.genderPreference})`,
-        );
+        reasons.push(`✓ Matches gender preference (${careReceiver.genderPreference})`);
       } else {
-        reasons.push(
-          `✗ Gender: ${careGiver.gender} (prefers ${careReceiver.genderPreference})`,
-        );
+        reasons.push(`✗ Gender: ${careGiver.gender} (prefers ${careReceiver.genderPreference})`);
       }
     } else {
       score += 30;
@@ -427,8 +406,7 @@ function ManualScheduleModal({
   const selectedSecondaryUnavailableEntry = unavailableCareGivers.find(
     (e) => e.careGiver._id === selectedSecondaryCareGiver?._id,
   );
-  const isForceAssign =
-    selectedUnavailableEntry || selectedSecondaryUnavailableEntry;
+  const isForceAssign = selectedUnavailableEntry || selectedSecondaryUnavailableEntry;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -437,9 +415,7 @@ function ManualScheduleModal({
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="text-2xl font-bold mb-2">Manual Scheduling</h2>
-            <p className="text-gray-600">
-              Select care giver(s) for this appointment
-            </p>
+            <p className="text-gray-600">Select care giver(s) for this appointment</p>
             {lastRefreshed && (
               <p className="text-xs text-gray-500 mt-1">
                 <Clock className="inline h-3 w-3 mr-1" />
@@ -460,10 +436,7 @@ function ManualScheduleModal({
                 className={`h-5 w-5 ${loading || refreshing ? "animate-spin text-blue-600" : ""}`}
               />
             </button>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <X className="h-6 w-6" />
             </button>
           </div>
@@ -517,17 +490,14 @@ function ManualScheduleModal({
           )}
 
           {/* Gender Preference */}
-          {careReceiver.genderPreference &&
-            careReceiver.genderPreference !== "No Preference" && (
-              <div className="mt-3">
-                <p className="text-gray-600 text-sm">
-                  Gender Preference:{" "}
-                  <span className="font-medium text-blue-800">
-                    {careReceiver.genderPreference}
-                  </span>
-                </p>
-              </div>
-            )}
+          {careReceiver.genderPreference && careReceiver.genderPreference !== "No Preference" && (
+            <div className="mt-3">
+              <p className="text-gray-600 text-sm">
+                Gender Preference:{" "}
+                <span className="font-medium text-blue-800">{careReceiver.genderPreference}</span>
+              </p>
+            </div>
+          )}
 
           {/* Address */}
           {careReceiver.address && (
@@ -575,9 +545,7 @@ function ManualScheduleModal({
             <div className="flex flex-col items-center justify-center py-12">
               <div className="animate-spin h-12 w-12 border-4 border-primary-600 border-t-transparent rounded-full mb-4" />
               <p className="text-gray-600 font-medium">
-                {refreshing
-                  ? "Refreshing all data..."
-                  : "Loading care givers..."}
+                {refreshing ? "Refreshing all data..." : "Loading care givers..."}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 Getting latest skills, availability, and coordinates...
@@ -586,9 +554,7 @@ function ManualScheduleModal({
           ) : error ? (
             <div className="text-center py-8 bg-red-50 rounded-lg border border-red-200">
               <AlertCircle className="h-12 w-12 mx-auto text-red-400 mb-3" />
-              <p className="text-red-800 font-medium mb-2">
-                No Available Care Givers
-              </p>
+              <p className="text-red-800 font-medium mb-2">No Available Care Givers</p>
               <p className="text-sm text-red-600 whitespace-pre-line max-w-md mx-auto mb-4">
                 {error}
               </p>
@@ -604,160 +570,136 @@ function ManualScheduleModal({
             <>
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {rankedCareGivers.map((careGiver) => {
-                const isPrimarySelected =
-                  selectedCareGiver?._id === careGiver._id;
-                const isSecondarySelected =
-                  selectedSecondaryCareGiver?._id === careGiver._id;
-                const isSelected = isPrimarySelected || isSecondarySelected;
+                  const isPrimarySelected = selectedCareGiver?._id === careGiver._id;
+                  const isSecondarySelected = selectedSecondaryCareGiver?._id === careGiver._id;
+                  const isSelected = isPrimarySelected || isSecondarySelected;
 
-                const requirements = visit.requirements || [];
-                const normalizedCGSkills = careGiver.skills.map((s) =>
-                  s.toLowerCase().replace(/ /g, "_"),
-                );
-                const normalizedRequirements = requirements.map((r) =>
-                  r.toLowerCase().replace(/ /g, "_"),
-                );
-                const hasAllSkills =
-                  requirements.length === 0 ||
-                  normalizedRequirements.every((req) =>
-                    normalizedCGSkills.includes(req),
+                  const requirements = visit.requirements || [];
+                  const normalizedCGSkills = careGiver.skills.map((s) =>
+                    s.toLowerCase().replace(/ /g, "_"),
                   );
+                  const normalizedRequirements = requirements.map((r) =>
+                    r.toLowerCase().replace(/ /g, "_"),
+                  );
+                  const hasAllSkills =
+                    requirements.length === 0 ||
+                    normalizedRequirements.every((req) => normalizedCGSkills.includes(req));
 
-                const matchesGender =
-                  !careReceiver.genderPreference ||
-                  careReceiver.genderPreference === "No Preference" ||
-                  careGiver.gender === careReceiver.genderPreference;
+                  const matchesGender =
+                    !careReceiver.genderPreference ||
+                    careReceiver.genderPreference === "No Preference" ||
+                    careGiver.gender === careReceiver.genderPreference;
 
-                return (
-                  <div
-                    key={careGiver._id}
-                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                      isSelected
-                        ? "border-primary-500 bg-primary-50 shadow-md"
-                        : "border-gray-200 hover:border-primary-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div className="flex items-start gap-4">
-                      {/* Selection */}
-                      <div className="flex flex-col gap-2 pt-1">
-                        {!visit.doubleHanded ? (
-                          <input
-                            type="radio"
-                            name="careGiver"
-                            checked={isPrimarySelected}
-                            onChange={() => setSelectedCareGiver(careGiver)}
-                            className="mt-1"
-                          />
-                        ) : (
-                          <>
-                            <label className="flex items-center gap-2 text-xs text-gray-600">
-                              <input
-                                type="radio"
-                                name="primaryCareGiver"
-                                checked={isPrimarySelected}
-                                onChange={() => setSelectedCareGiver(careGiver)}
-                              />
-                              Primary
-                            </label>
-                            <label className="flex items-center gap-2 text-xs text-gray-600">
-                              <input
-                                type="radio"
-                                name="secondaryCareGiver"
-                                checked={isSecondarySelected}
-                                onChange={() =>
-                                  setSelectedSecondaryCareGiver(careGiver)
-                                }
-                                disabled={
-                                  selectedCareGiver?._id === careGiver._id
-                                }
-                              />
-                              Secondary
-                            </label>
-                          </>
-                        )}
-                      </div>
+                  return (
+                    <div
+                      key={careGiver._id}
+                      className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                        isSelected
+                          ? "border-primary-500 bg-primary-50 shadow-md"
+                          : "border-gray-200 hover:border-primary-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-start gap-4">
+                        {/* Selection */}
+                        <div className="flex flex-col gap-2 pt-1">
+                          {!visit.doubleHanded ? (
+                            <input
+                              type="radio"
+                              name="careGiver"
+                              checked={isPrimarySelected}
+                              onChange={() => setSelectedCareGiver(careGiver)}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <>
+                              <label className="flex items-center gap-2 text-xs text-gray-600">
+                                <input
+                                  type="radio"
+                                  name="primaryCareGiver"
+                                  checked={isPrimarySelected}
+                                  onChange={() => setSelectedCareGiver(careGiver)}
+                                />
+                                Primary
+                              </label>
+                              <label className="flex items-center gap-2 text-xs text-gray-600">
+                                <input
+                                  type="radio"
+                                  name="secondaryCareGiver"
+                                  checked={isSecondarySelected}
+                                  onChange={() => setSelectedSecondaryCareGiver(careGiver)}
+                                  disabled={selectedCareGiver?._id === careGiver._id}
+                                />
+                                Secondary
+                              </label>
+                            </>
+                          )}
+                        </div>
 
-                      {/* Care Giver Info */}
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h4 className="font-semibold text-lg">
-                              {careGiver.name}
-                            </h4>
-                            <p className="text-sm text-gray-600">
-                              {careGiver.email}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              {careGiver.phone}
-                            </p>
+                        {/* Care Giver Info */}
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h4 className="font-semibold text-lg">{careGiver.name}</h4>
+                              <p className="text-sm text-gray-600">{careGiver.email}</p>
+                              <p className="text-sm text-gray-600">{careGiver.phone}</p>
+                            </div>
+
+                            {/* Match Score */}
+                            <div className="text-right">
+                              <div
+                                className={`text-2xl font-bold ${
+                                  careGiver.matchData.score >= 80
+                                    ? "text-green-600"
+                                    : careGiver.matchData.score >= 60
+                                      ? "text-blue-600"
+                                      : careGiver.matchData.score >= 40
+                                        ? "text-orange-600"
+                                        : "text-red-600"
+                                }`}
+                              >
+                                {Math.round(careGiver.matchData.score)}%
+                              </div>
+                              <p className="text-xs text-gray-500">Match Score</p>
+                            </div>
                           </div>
 
-                          {/* Match Score */}
-                          <div className="text-right">
+                          {/* Skills */}
+                          <div className="mb-2">
+                            <p className="text-xs text-gray-600 mb-1">Skills:</p>
+                            <div className="flex flex-wrap gap-1">
+                              {careGiver.skills.map((skill, idx) => {
+                                const normalizedSkill = skill.toLowerCase().replace(/ /g, "_");
+                                const isRequired = normalizedRequirements.includes(normalizedSkill);
+                                return (
+                                  <span
+                                    key={idx}
+                                    className={`px-2 py-1 text-xs rounded ${
+                                      isRequired
+                                        ? "bg-green-100 text-green-800 font-medium"
+                                        : "bg-gray-100 text-gray-600"
+                                    }`}
+                                  >
+                                    {isRequired && <Check className="h-3 w-3 inline mr-0.5" />}
+                                    {getSkillLabel(skill)}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Gender & Distance */}
+                          <div className="flex items-center gap-4 text-sm flex-wrap">
                             <div
-                              className={`text-2xl font-bold ${
-                                careGiver.matchData.score >= 80
-                                  ? "text-green-600"
-                                  : careGiver.matchData.score >= 60
-                                    ? "text-blue-600"
-                                    : careGiver.matchData.score >= 40
-                                      ? "text-orange-600"
-                                      : "text-red-600"
+                              className={`flex items-center gap-1 ${
+                                matchesGender ? "text-green-600" : "text-orange-600"
                               }`}
                             >
-                              {Math.round(careGiver.matchData.score)}%
+                              <User className="h-4 w-4" />
+                              <span>{careGiver.gender}</span>
+                              {matchesGender && <CheckCircle className="h-4 w-4" />}
                             </div>
-                            <p className="text-xs text-gray-500">Match Score</p>
-                          </div>
-                        </div>
 
-                        {/* Skills */}
-                        <div className="mb-2">
-                          <p className="text-xs text-gray-600 mb-1">Skills:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {careGiver.skills.map((skill, idx) => {
-                              const normalizedSkill = skill
-                                .toLowerCase()
-                                .replace(/ /g, "_");
-                              const isRequired =
-                                normalizedRequirements.includes(
-                                  normalizedSkill,
-                                );
-                              return (
-                                <span
-                                  key={idx}
-                                  className={`px-2 py-1 text-xs rounded ${
-                                    isRequired
-                                      ? "bg-green-100 text-green-800 font-medium"
-                                      : "bg-gray-100 text-gray-600"
-                                  }`}
-                                >
-                                  {isRequired && <Check className="h-3 w-3 inline mr-0.5" />}
-                                  {getSkillLabel(skill)}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Gender & Distance */}
-                        <div className="flex items-center gap-4 text-sm flex-wrap">
-                          <div
-                            className={`flex items-center gap-1 ${
-                              matchesGender
-                                ? "text-green-600"
-                                : "text-orange-600"
-                            }`}
-                          >
-                            <User className="h-4 w-4" />
-                            <span>{careGiver.gender}</span>
-                            {matchesGender && (
-                              <CheckCircle className="h-4 w-4" />
-                            )}
-                          </div>
-
-                          {careGiver.distance !== undefined &&
-                            careGiver.distance !== null && (
+                            {careGiver.distance !== undefined && careGiver.distance !== null && (
                               <div className="flex items-center gap-1 text-gray-600">
                                 <MapPin className="h-4 w-4" />
                                 <span>{careGiver.distance.toFixed(1)} km</span>
@@ -769,60 +711,60 @@ function ManualScheduleModal({
                               </div>
                             )}
 
-                          {careGiver.canDrive && (
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
-                              Can Drive
-                            </span>
-                          )}
+                            {careGiver.canDrive && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                                Can Drive
+                              </span>
+                            )}
 
-                          {careGiver.address?.city && (
-                            <span className="text-xs text-gray-500">
-                              {careGiver.address.city}
-                            </span>
+                            {careGiver.address?.city && (
+                              <span className="text-xs text-gray-500">
+                                {careGiver.address.city}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Match Reasons */}
+                          <div className="mt-2">
+                            <div className="flex flex-wrap gap-1">
+                              {careGiver.matchData.reasons.map((reason, idx) => {
+                                const isPass = reason.startsWith("✓");
+                                const isFail = reason.startsWith("✗");
+                                const text = isPass || isFail ? reason.slice(2) : reason;
+                                return (
+                                  <span
+                                    key={idx}
+                                    className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
+                                      isPass
+                                        ? "bg-green-50 text-green-700"
+                                        : isFail
+                                          ? "bg-orange-50 text-orange-700"
+                                          : "bg-blue-50 text-blue-700"
+                                    }`}
+                                  >
+                                    {isPass && <Check className="h-3 w-3 flex-shrink-0" />}
+                                    {isFail && <X className="h-3 w-3 flex-shrink-0" />}
+                                    {text}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Warnings */}
+                          {!hasAllSkills && requirements.length > 0 && (
+                            <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-2">
+                              <p className="text-xs text-yellow-800 flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                Missing some required skills
+                              </p>
+                            </div>
                           )}
                         </div>
-
-                        {/* Match Reasons */}
-                        <div className="mt-2">
-                          <div className="flex flex-wrap gap-1">
-                            {careGiver.matchData.reasons.map((reason, idx) => {
-                              const isPass = reason.startsWith("✓");
-                              const isFail = reason.startsWith("✗");
-                              const text = isPass || isFail ? reason.slice(2) : reason;
-                              return (
-                                <span
-                                  key={idx}
-                                  className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${
-                                    isPass
-                                      ? "bg-green-50 text-green-700"
-                                      : isFail
-                                        ? "bg-orange-50 text-orange-700"
-                                        : "bg-blue-50 text-blue-700"
-                                  }`}
-                                >
-                                  {isPass && <Check className="h-3 w-3 flex-shrink-0" />}
-                                  {isFail && <X className="h-3 w-3 flex-shrink-0" />}
-                                  {text}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Warnings */}
-                        {!hasAllSkills && requirements.length > 0 && (
-                          <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-2">
-                            <p className="text-xs text-yellow-800 flex items-center gap-1">
-                              <AlertCircle className="h-3 w-3" />
-                              Missing some required skills
-                            </p>
-                          </div>
-                        )}
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
               </div>
               {unavailableCareGivers.length > 0 && (
                 <div className="mt-6">
@@ -876,9 +818,7 @@ function ManualScheduleModal({
           ) : (
             <div className="text-center py-8 bg-gray-50 rounded-lg">
               <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-3" />
-              <p className="text-gray-600 mb-2 font-medium">
-                No care givers found
-              </p>
+              <p className="text-gray-600 mb-2 font-medium">No care givers found</p>
               <button
                 onClick={handleRefresh}
                 className="btn-secondary flex items-center gap-2 mx-auto"
@@ -898,8 +838,10 @@ function ManualScheduleModal({
               <span>
                 You are assigning a care giver who does not meet the usual criteria
                 {selectedUnavailableEntry && `: ${selectedUnavailableEntry.reason}`}
-                {selectedSecondaryUnavailableEntry && selectedUnavailableEntry !== selectedSecondaryUnavailableEntry && `; secondary: ${selectedSecondaryUnavailableEntry.reason}`}.
-                Schedule anyway if this is intentional.
+                {selectedSecondaryUnavailableEntry &&
+                  selectedUnavailableEntry !== selectedSecondaryUnavailableEntry &&
+                  `; secondary: ${selectedSecondaryUnavailableEntry.reason}`}
+                . Schedule anyway if this is intentional.
               </span>
             </div>
           )}
@@ -914,11 +856,7 @@ function ManualScheduleModal({
             </button>
 
             <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="btn-secondary"
-                disabled={scheduling}
-              >
+              <button onClick={onClose} className="btn-secondary" disabled={scheduling}>
                 Cancel
               </button>
               <button
@@ -930,19 +868,19 @@ function ManualScheduleModal({
                 }
                 className="btn-primary flex items-center gap-2"
               >
-              {scheduling ? (
-                <>
-                  <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                  Scheduling...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-5 w-5" />
-                  Schedule Appointment
-                </>
-              )}
-            </button>
-          </div>
+                {scheduling ? (
+                  <>
+                    <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                    Scheduling...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-5 w-5" />
+                    Schedule Appointment
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

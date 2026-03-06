@@ -112,6 +112,8 @@ export function ScheduleGenerationProvider({ children }) {
                   finishWithPayload(payload);
                   queryClient.invalidateQueries({ queryKey: ["appointments"] });
                   queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
+                  queryClient.invalidateQueries({ queryKey: ["unscheduled"] });
+                  queryClient.invalidateQueries({ queryKey: ["scheduleStats"] });
                   const scheduled = payload.summary.totalScheduled;
                   const failed = payload.summary.totalFailed;
                   toast.success(
@@ -325,8 +327,10 @@ function ScheduleSocketSync() {
     };
 
     const invalidateAndRunCheck = (startDate, endDate) => {
-      queryClient.refetchQueries({ queryKey: ["appointments"] });
-      queryClient.refetchQueries({ queryKey: ["needs-reassignment"] });
+      queryClient.invalidateQueries({ queryKey: ["appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["needs-reassignment"] });
+      queryClient.invalidateQueries({ queryKey: ["unscheduled"] });
+      queryClient.invalidateQueries({ queryKey: ["scheduleStats"] });
       if (startDate && endDate) {
         runCheck(startDate, endDate, { silent: true });
       }
