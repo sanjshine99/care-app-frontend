@@ -2,7 +2,7 @@
 // FIXED - Uses correct endpoints and opens ManualScheduleModal
 
 import { memo, useState, useMemo } from "react";
-import { AlertTriangle, User, Clock, X, RefreshCw, Loader2, Check } from "lucide-react";
+import { AlertTriangle, User, Clock, X, RefreshCw, Loader2, Check, ChevronDown, ChevronUp } from "lucide-react";
 import moment from "moment";
 import api from "../../services/api";
 import { toast } from "react-toastify";
@@ -31,6 +31,16 @@ function UnscheduledList({ unscheduled, schedulingInProgress = [], onScheduleSuc
     () => new Set((schedulingInProgress || []).map((p) => String(p.careReceiverId))),
     [schedulingInProgress]
   );
+  const [expandedIds, setExpandedIds] = useState(() =>
+    new Set((unscheduled || []).map((g) => g.careReceiver?.id ?? g.careReceiver?._id))
+  );
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showManualScheduleModal, setShowManualScheduleModal] = useState(false);
@@ -143,12 +153,23 @@ function UnscheduledList({ unscheduled, schedulingInProgress = [], onScheduleSuc
           const crId = group.careReceiver?.id ?? group.careReceiver?._id;
           const isSchedulingInProgress = crId && inProgressSet.has(String(crId));
 
+          const isExpanded = expandedIds.has(crId);
+
           return (
           <div key={crId} className="space-y-2">
-            {/* Care Receiver Header */}
-            <div className="font-semibold text-lg text-gray-800 flex items-center gap-2">
-              <User className="h-5 w-5 text-primary-600" />
-              {group.careReceiver?.name || "Unknown Care Receiver"}
+            {/* Care Receiver Header - Accordion Toggle */}
+            <button
+              type="button"
+              onClick={() => toggleExpand(crId)}
+              className="w-full font-semibold text-lg text-gray-800 flex items-center gap-2 hover:bg-gray-50 rounded-lg px-2 py-1 transition-colors"
+            >
+              {isExpanded ? (
+                <ChevronUp className="h-5 w-5 text-gray-400 shrink-0" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-400 shrink-0" />
+              )}
+              <User className="h-5 w-5 text-primary-600 shrink-0" />
+              <span className="text-left">{group.careReceiver?.name || "Unknown Care Receiver"}</span>
               {isSchedulingInProgress ? (
                 <span className="text-sm text-blue-600 font-normal flex items-center gap-1">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -160,8 +181,10 @@ function UnscheduledList({ unscheduled, schedulingInProgress = [], onScheduleSuc
                   {group.missing !== 1 ? "s" : ""})
                 </span>
               )}
-            </div>
+            </button>
 
+            {isExpanded && (
+            <>
             {isSchedulingInProgress ? (
               <div className="border border-blue-200 bg-blue-50 rounded-lg p-4 ml-8 text-sm text-blue-800">
                 Appointments for this care receiver are being generated. They will appear in the calendar when ready.
@@ -233,6 +256,8 @@ function UnscheduledList({ unscheduled, schedulingInProgress = [], onScheduleSuc
                   </div>
                 );
               })}
+            </>
+            )}
             </>
             )}
           </div>
