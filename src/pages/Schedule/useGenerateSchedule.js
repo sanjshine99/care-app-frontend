@@ -1,6 +1,6 @@
 // Custom hook — encapsulates all state and handlers for GenerateSchedule page
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import moment from "moment";
 import { toast } from "react-toastify";
 import api from "../../services/api";
@@ -10,16 +10,17 @@ import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 
 export function useGenerateSchedule() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { lastCheck, isChecking, runCheck } = useUnscheduledCheck();
   const { lastGeneration, isGenerating, runGeneration, clearLastGeneration } =
     useScheduleGeneration();
   const confirmDialog = useConfirmDialog();
 
   const [startDate, setStartDate] = useState(
-    moment().add(1, "day").format("YYYY-MM-DD"),
+    searchParams.get("start") || moment().add(1, "day").format("YYYY-MM-DD"),
   );
   const [endDate, setEndDate] = useState(
-    moment().add(1, "month").format("YYYY-MM-DD"),
+    searchParams.get("end") || moment().add(1, "month").format("YYYY-MM-DD"),
   );
   const [careReceivers, setCareReceivers] = useState([]);
   const [selectedReceivers, setSelectedReceivers] = useState([]);
@@ -71,6 +72,10 @@ export function useGenerateSchedule() {
 
   const handleStartDateChange = (newStart) => {
     const start = moment(newStart);
+    if (start.isBefore(moment(), "day")) {
+      toast.error("Start date must be in the future");
+      return;
+    }
     const maxEnd = start.clone().add(1, "month");
     setStartDate(start.format("YYYY-MM-DD"));
     if (moment(endDate).isAfter(maxEnd)) {

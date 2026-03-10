@@ -95,6 +95,7 @@ function GenerateSchedule() {
               <input
                 type="date"
                 value={startDate}
+                min={moment().add(1, "day").format("YYYY-MM-DD")}
                 onChange={(e) => handleStartDateChange(e.target.value)}
                 className="input-field"
               />

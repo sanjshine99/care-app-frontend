@@ -12,6 +12,7 @@ import {
   Plus,
   AlertCircle,
   AlertTriangle,
+  Clock,
   Filter,
   ChevronLeft,
   ChevronRight,
@@ -86,6 +87,15 @@ function Schedule() {
 
   const appointments = appointmentsData ?? [];
   const needsReassignment = needsReassignmentData ?? [];
+
+  // ========================================
+  // FETCH SCHEDULE STATUS (expiry info)
+  // ========================================
+  const { data: scheduleStatus } = useQuery({
+    queryKey: ["scheduleStatus"],
+    queryFn: () => api.get("/schedule/schedule-status").then((r) => r.data.data),
+    staleTime: 5 * 60 * 1000,
+  });
 
   // ========================================
   // LOAD UNSCHEDULED WHEN TAB BECOMES ACTIVE
@@ -297,6 +307,35 @@ function Schedule() {
             </button>
           </div>
         </div>
+
+        {/* Schedule Expiry Warning Banner */}
+        {scheduleStatus && scheduleStatus.daysRemaining <= 7 && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Clock className="h-6 w-6 text-amber-600 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-800">Schedule Ending Soon</p>
+                <p className="text-sm text-amber-700">
+                  {scheduleStatus.daysRemaining > 0
+                    ? `Your schedule ends on ${moment(scheduleStatus.lastScheduledDate).format("MMM D, YYYY")} (${scheduleStatus.daysRemaining} day${scheduleStatus.daysRemaining !== 1 ? "s" : ""} remaining).`
+                    : "Your schedule has ended."}{" "}
+                  {scheduleStatus.nextMonth && `Generate appointments for ${scheduleStatus.nextMonth.name}.`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() =>
+                navigate(
+                  `/schedule/generate?start=${scheduleStatus.suggestedRange.startDate}&end=${scheduleStatus.suggestedRange.endDate}`,
+                )
+              }
+              className="btn-primary flex items-center gap-2 whitespace-nowrap ml-4"
+            >
+              <Plus className="h-4 w-4" />
+              Schedule Next Month
+            </button>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
