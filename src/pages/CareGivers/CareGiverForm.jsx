@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Check, X } from 'lucide-react';
+import { ArrowLeft, Save, Check, X, AlertCircle } from 'lucide-react';
 import { careGiverService } from '../../services/careGiverService';
 import { toast } from 'react-toastify';
+import { isValidUkPostcodeFormat, normalizeUkPostcode } from '../../utils/ukPostcode';
 
 const skillOptions = [
   { value: 'personal_care', label: 'Personal Care' },
@@ -23,7 +24,7 @@ function CareGiverForm() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [addressErrors, setAddressErrors] = useState({ street: '', city: '', postcode: '' });
-  const [postcodeStatus, setPostcodeStatus] = useState(null); // null | 'validating' | 'valid' | 'invalid'
+  const [postcodeStatus, setPostcodeStatus] = useState(null); // null | 'validating' | 'valid' | 'unverified' | 'invalid'
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -73,7 +74,7 @@ function CareGiverForm() {
         });
         const loadedPostcode = (cg.address?.postcode || '').trim();
         if (loadedPostcode) {
-          validatePostcode(loadedPostcode.toUpperCase());
+          validatePostcode(loadedPostcode);
         }
       }
     } catch (error) {
@@ -107,29 +108,36 @@ function CareGiverForm() {
   };
 
   const validatePostcode = async (postcode) => {
-    if (!postcode) {
+    if (!postcode?.trim()) {
       setAddressErrors((prev) => ({ ...prev, postcode: 'Postcode is required' }));
       setPostcodeStatus('invalid');
       return;
     }
-    const ukPostcodeRegex = /^[A-Z]{1,2}[0-9][0-9A-Z]?\s?[0-9][A-Z]{2}$/;
-    if (!ukPostcodeRegex.test(postcode)) {
+    const normalized = normalizeUkPostcode(postcode);
+    if (!isValidUkPostcodeFormat(normalized)) {
       setAddressErrors((prev) => ({ ...prev, postcode: 'Invalid UK postcode format (e.g. SW1A 1AA)' }));
       setPostcodeStatus('invalid');
       return;
     }
+    setFormData((prev) => {
+      if (prev.address.postcode === normalized) return prev;
+      return {
+        ...prev,
+        address: { ...prev.address, postcode: normalized },
+      };
+    });
     setPostcodeStatus('validating');
     try {
       const res = await fetch(
-        `https://api.postcodes.io/postcodes/${encodeURIComponent(postcode)}/validate`
+        `https://api.postcodes.io/postcodes/${encodeURIComponent(normalized)}/validate`
       );
       const data = await res.json();
       if (data.result === true) {
         setAddressErrors((prev) => ({ ...prev, postcode: '' }));
         setPostcodeStatus('valid');
       } else {
-        setAddressErrors((prev) => ({ ...prev, postcode: 'This postcode does not exist in the UK' }));
-        setPostcodeStatus('invalid');
+        setAddressErrors((prev) => ({ ...prev, postcode: '' }));
+        setPostcodeStatus('unverified');
       }
     } catch {
       // API unavailable — fall back to format-only validation
@@ -176,7 +184,7 @@ function CareGiverForm() {
       return;
     }
 
-    if (postcodeStatus !== 'valid') {
+    if (postcodeStatus !== 'valid' && postcodeStatus !== 'unverified') {
       toast.error('Please enter a valid UK postcode and wait for verification');
       return;
     }
@@ -393,6 +401,8 @@ function CareGiverForm() {
                         ? 'border-red-500 focus:ring-red-500'
                         : postcodeStatus === 'valid'
                         ? 'border-green-500 focus:ring-green-500'
+                        : postcodeStatus === 'unverified'
+                        ? 'border-amber-500 focus:ring-amber-500'
                         : ''
                     }`}
                     placeholder="SW1A 1AA"
@@ -404,6 +414,9 @@ function CareGiverForm() {
                     {postcodeStatus === 'valid' && (
                       <Check className="h-4 w-4 text-green-500" />
                     )}
+                    {postcodeStatus === 'unverified' && (
+                      <AlertCircle className="h-4 w-4 text-amber-500" aria-hidden />
+                    )}
                     {postcodeStatus === 'invalid' && (
                       <X className="h-4 w-4 text-red-500" />
                     )}
@@ -412,7 +425,12 @@ function CareGiverForm() {
                 {addressErrors.postcode ? (
                   <p className="text-xs text-red-500 mt-1">{addressErrors.postcode}</p>
                 ) : postcodeStatus === 'valid' ? (
-                  <p className="text-xs text-green-600 mt-1">Valid UK postcode</p>
+                  <p className="text-xs text-green-600 mt-1">Verified in the UK postcode directory</p>
+                ) : postcodeStatus === 'unverified' ? (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Valid format, but this exact code is not listed in the directory. Check the inward part; you can
+                    still save if the address is correct.
+                  </p>
                 ) : (
                   <p className="text-xs text-gray-500 mt-1">UK postcode format (e.g. SW1A 1AA)</p>
                 )}
