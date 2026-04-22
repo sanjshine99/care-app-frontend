@@ -54,4 +54,31 @@ export const careReceiverService = {
     });
     return response.data;
   },
+
+  listServiceNotRequired: async (id, params = {}) => {
+    const response = await api.get(`/carereceivers/${id}/service-not-required`, {
+      params,
+    });
+    return response.data;
+  },
+
+  createServiceNotRequired: async (id, body) => {
+    const response = await api.post(`/carereceivers/${id}/service-not-required`, body);
+    return response.data;
+  },
+
+  updateServiceNotRequired: async (id, periodId, body) => {
+    const response = await api.patch(
+      `/carereceivers/${id}/service-not-required/${periodId}`,
+      body,
+    );
+    return response.data;
+  },
+
+  deleteServiceNotRequired: async (id, periodId) => {
+    const response = await api.delete(
+      `/carereceivers/${id}/service-not-required/${periodId}`,
+    );
+    return response.data;
+  },
 };

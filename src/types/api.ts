@@ -120,6 +120,21 @@ export interface CareReceiversListData {
   pagination: Pagination;
 }
 
+export type ServiceNotRequiredReasonType = "hospitalised" | "unwell" | "other";
+
+export interface ServiceNotRequiredPeriod {
+  _id: string;
+  careReceiver: string;
+  startDate: string;
+  endDate: string;
+  reasonType: ServiceNotRequiredReasonType;
+  comment?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
 // ============================================================
 // APPOINTMENT
 // ============================================================

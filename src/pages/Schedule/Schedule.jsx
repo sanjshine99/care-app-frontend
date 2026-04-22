@@ -1,7 +1,7 @@
 // frontend/src/pages/Schedule/Schedule.jsx
 // FIXED - Timezone bug resolved in date formatting
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
 import { useQuery } from "@tanstack/react-query";
@@ -13,15 +13,14 @@ import {
   AlertCircle,
   AlertTriangle,
   Clock,
-  Filter,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import CalendarView from "./CalendarView";
+import ScheduleFiltersPopover from "./ScheduleFiltersPopover";
 import UnscheduledList from "./UnscheduledList";
 import NeedsReassignment from "./NeedsReassignment";
 import api from "../../services/api";
+import { careReceiverService } from "../../services/careReceiverService";
 import { useUnscheduledCheck } from "../../contexts/UnscheduledCheckContext";
 import { formatDateForAPI } from "../../utils/dateUtils";
 
@@ -30,6 +29,7 @@ function Schedule() {
   const { lastCheck, isChecking, runCheck, clearLastCheck } = useUnscheduledCheck();
   const [validating, setValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("calendar");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [dateRange, setDateRange] = useState(() => ({
     start: moment().startOf("week").toDate(),
     end: moment().endOf("week").toDate(),
@@ -37,6 +37,80 @@ function Schedule() {
 
   const currentStartDate = formatDateForAPI(dateRange.start);
   const currentEndDate = formatDateForAPI(dateRange.end);
+
+  const [calendarFilterType, setCalendarFilterType] = useState("all");
+  const [calendarFilterCareGiverId, setCalendarFilterCareGiverId] = useState("");
+  const [calendarFilterCareReceiverId, setCalendarFilterCareReceiverId] = useState("");
+
+  const setCalendarFilterTypeSafe = useCallback((type) => {
+    setCalendarFilterType(type);
+    if (type !== "care_giver") setCalendarFilterCareGiverId("");
+    if (type !== "care_receiver") setCalendarFilterCareReceiverId("");
+  }, []);
+
+  const appointmentQueryParams = useMemo(() => {
+    const params = {
+      startDate: currentStartDate,
+      endDate: currentEndDate,
+      limit: 1000,
+    };
+    if (calendarFilterType === "care_giver" && calendarFilterCareGiverId) {
+      params.careGiverId = calendarFilterCareGiverId;
+    }
+    if (calendarFilterType === "care_receiver" && calendarFilterCareReceiverId) {
+      params.careReceiverId = calendarFilterCareReceiverId;
+    }
+    return params;
+  }, [currentStartDate, currentEndDate, calendarFilterType, calendarFilterCareGiverId, calendarFilterCareReceiverId]);
+
+  const appointmentQueryKey = useMemo(
+    () => [
+      "appointments",
+      currentStartDate,
+      currentEndDate,
+      calendarFilterType,
+      calendarFilterType === "care_giver" ? calendarFilterCareGiverId : "",
+      calendarFilterType === "care_receiver" ? calendarFilterCareReceiverId : "",
+    ],
+    [
+      currentStartDate,
+      currentEndDate,
+      calendarFilterType,
+      calendarFilterCareGiverId,
+      calendarFilterCareReceiverId,
+    ],
+  );
+
+  const { data: calendarFilterCareGivers = [] } = useQuery({
+    queryKey: ["schedule-filter-caregivers"],
+    queryFn: async () => {
+      const r = await api.get("/caregivers?limit=200&isActive=true");
+      if (!r.data?.success) return [];
+      return (r.data.data.careGivers || []).map((c) => ({ id: c._id, name: c.name }));
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: calendarFilterReceivers = [] } = useQuery({
+    queryKey: ["schedule-filter-receivers"],
+    queryFn: async () => {
+      const r = await careReceiverService.getAll({ limit: 200, isActive: true });
+      if (!r?.success) return [];
+      const list = r.data?.careReceivers ?? [];
+      return list.map((c) => ({ id: c._id, name: c.name }));
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const calendarEntityFilter = useMemo(() => {
+    if (calendarFilterType === "care_giver" && calendarFilterCareGiverId) {
+      return { mode: "care_giver", careGiverId: calendarFilterCareGiverId };
+    }
+    if (calendarFilterType === "care_receiver" && calendarFilterCareReceiverId) {
+      return { mode: "care_receiver", careReceiverId: calendarFilterCareReceiverId };
+    }
+    return { mode: "all" };
+  }, [calendarFilterType, calendarFilterCareGiverId, calendarFilterCareReceiverId]);
 
   const lastCheckMatchesRange =
     lastCheck && lastCheck.startDate === currentStartDate && lastCheck.endDate === currentEndDate;
@@ -48,16 +122,12 @@ function Schedule() {
   // FETCH APPOINTMENTS via React Query
   // ========================================
   const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
-    queryKey: ["appointments", currentStartDate, currentEndDate],
+    queryKey: appointmentQueryKey,
     queryFn: () =>
-      api
-        .get("/schedule/appointments", {
-          params: { startDate: currentStartDate, endDate: currentEndDate, limit: 1000 },
-        })
-        .then((r) => {
-          const d = r.data.data;
-          return d?.appointments ?? (Array.isArray(d) ? d : []);
-        }),
+      api.get("/schedule/appointments", { params: appointmentQueryParams }).then((r) => {
+        const d = r.data.data;
+        return d?.appointments ?? (Array.isArray(d) ? d : []);
+      }),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -107,14 +177,14 @@ function Schedule() {
   }, [activeTab, currentStartDate, currentEndDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const invalidateSchedule = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["appointments", currentStartDate, currentEndDate] });
+    queryClient.invalidateQueries({ queryKey: ["appointments"] });
     queryClient.invalidateQueries({ queryKey: ["needs-reassignment", currentStartDate, currentEndDate] });
     queryClient.invalidateQueries({ queryKey: ["unscheduled"] });
     queryClient.invalidateQueries({ queryKey: ["scheduleStats"] });
   }, [currentStartDate, currentEndDate]);
 
   useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: ["appointments", currentStartDate, currentEndDate] });
+    queryClient.invalidateQueries({ queryKey: ["appointments"] });
     queryClient.invalidateQueries({ queryKey: ["needs-reassignment", currentStartDate, currentEndDate] });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -267,6 +337,27 @@ function Schedule() {
 
   const activeQuickRange = getQuickRangeForRange(dateRange.start, dateRange.end);
 
+  const scheduleFilterSummarySuffix = useMemo(() => {
+    if (calendarFilterType === "care_giver" && calendarFilterCareGiverId) {
+      return (
+        calendarFilterCareGivers.find((c) => c.id === calendarFilterCareGiverId)?.name || "Care giver"
+      );
+    }
+    if (calendarFilterType === "care_receiver" && calendarFilterCareReceiverId) {
+      return (
+        calendarFilterReceivers.find((c) => c.id === calendarFilterCareReceiverId)?.name ||
+        "Care receiver"
+      );
+    }
+    return "All";
+  }, [
+    calendarFilterType,
+    calendarFilterCareGiverId,
+    calendarFilterCareReceiverId,
+    calendarFilterCareGivers,
+    calendarFilterReceivers,
+  ]);
+
   // Calculate stats
   const totalCount = appointments.length;
   const scheduledCount = appointments.filter((a) => a.status === "scheduled").length;
@@ -357,130 +448,41 @@ function Schedule() {
           </div>
         </div>
 
-        {/* Filter by Date Range - shared for all tabs */}
+        {/* Schedule filters — compact toolbar + popover (shared for all tabs) */}
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Filter className="h-5 w-5 text-gray-600" />
-              <h3 className="font-semibold text-lg">Filter by Date Range</h3>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handlePreviousMonth}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Previous month"
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 min-w-0 sm:flex-1">
+              <p className="text-sm font-semibold text-gray-900">Schedule filters</p>
+              <span
+                className="inline-flex w-fit max-w-full items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 truncate"
+                title={`${moment(dateRange.start).format("MMM D, YYYY")} – ${moment(dateRange.end).format("MMM D, YYYY")} · ${scheduleFilterSummarySuffix}`}
               >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <span className="text-sm font-medium px-3">
-                {moment(dateRange.start).format("MMMM YYYY")}
+                <span className="truncate">
+                  {moment(dateRange.start).format("MMM D")} – {moment(dateRange.end).format("MMM D, YYYY")} ·{" "}
+                  {scheduleFilterSummarySuffix}
+                </span>
               </span>
-              <button
-                onClick={handleNextMonth}
-                className="p-2 hover:bg-gray-100 rounded"
-                title="Next month"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
             </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 mb-4">
-            <button
-              onClick={() => handleQuickRange("today")}
-              className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                activeQuickRange === "today"
-                  ? "bg-blue-600 text-white ring-2 ring-blue-400 ring-offset-1"
-                  : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => handleQuickRange("this_week")}
-              className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                activeQuickRange === "this_week"
-                  ? "bg-green-600 text-white ring-2 ring-green-400 ring-offset-1"
-                  : "bg-green-100 text-green-700 hover:bg-green-200"
-              }`}
-            >
-              This Week
-            </button>
-            <button
-              onClick={() => handleQuickRange("this_month")}
-              className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                activeQuickRange === "this_month"
-                  ? "bg-purple-600 text-white ring-2 ring-purple-400 ring-offset-1"
-                  : "bg-purple-100 text-purple-700 hover:bg-purple-200"
-              }`}
-            >
-              This Month
-            </button>
-            <button
-              onClick={() => handleQuickRange("last_month")}
-              className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                activeQuickRange === "last_month"
-                  ? "bg-orange-600 text-white ring-2 ring-orange-400 ring-offset-1"
-                  : "bg-orange-100 text-orange-700 hover:bg-orange-200"
-              }`}
-            >
-              Last Month
-            </button>
-            <button
-              onClick={() => handleQuickRange("all_time")}
-              className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                activeQuickRange === "all_time"
-                  ? "bg-indigo-600 text-white ring-2 ring-indigo-400 ring-offset-1"
-                  : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
-              }`}
-            >
-              Last 90 Days
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-3 items-end">
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
-              <input
-                type="date"
-                value={formatDateForAPI(dateRange.start)}
-                onChange={(e) =>
-                  setDateRange((prev) => ({ ...prev, start: new Date(e.target.value) }))
-                }
-                className="input w-full"
-              />
-            </div>
-
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
-              <input
-                type="date"
-                value={formatDateForAPI(dateRange.end)}
-                onChange={(e) =>
-                  setDateRange((prev) => ({ ...prev, end: new Date(e.target.value) }))
-                }
-                min={formatDateForAPI(dateRange.start)}
-                className="input w-full"
-              />
-            </div>
-
-            <button
-              onClick={handleApplyDateRange}
-              disabled={!dateRange.start || !dateRange.end}
-              className="btn-primary flex items-center gap-2 whitespace-nowrap"
-            >
-              <CalendarIcon className="h-5 w-5" />
-              Apply Filter
-            </button>
-          </div>
-
-          <div className="mt-3 text-sm text-gray-600">
-            <p>
-              Showing: <strong>{moment(dateRange.start).format("MMM D, YYYY")}</strong> to{" "}
-              <strong>{moment(dateRange.end).format("MMM D, YYYY")}</strong> ({appointments.length}{" "}
-              appointments)
-            </p>
+            <ScheduleFiltersPopover
+              open={filtersOpen}
+              onOpenChange={setFiltersOpen}
+              dateRange={dateRange}
+              setDateRange={setDateRange}
+              activeQuickRange={activeQuickRange}
+              onQuickRange={handleQuickRange}
+              onApplyDateRange={handleApplyDateRange}
+              onPreviousMonth={handlePreviousMonth}
+              onNextMonth={handleNextMonth}
+              calendarFilterType={calendarFilterType}
+              onFilterTypeChange={setCalendarFilterTypeSafe}
+              calendarFilterCareGiverId={calendarFilterCareGiverId}
+              onCareGiverIdChange={setCalendarFilterCareGiverId}
+              calendarFilterCareReceiverId={calendarFilterCareReceiverId}
+              onCareReceiverIdChange={setCalendarFilterCareReceiverId}
+              careGiverOptions={calendarFilterCareGivers}
+              careReceiverOptions={calendarFilterReceivers}
+              appointmentsCount={appointments.length}
+            />
           </div>
         </div>
 
@@ -575,6 +577,7 @@ function Schedule() {
                   endDate={currentEndDate}
                   onRefresh={handleRefresh}
                   loading={appointmentsLoading}
+                  entityFilter={calendarEntityFilter}
                 />
               </div>
             )}

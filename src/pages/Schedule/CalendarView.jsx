@@ -10,7 +10,20 @@ import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
 import CalendarCell from "./CalendarCell";
 import AppointmentDetailModal from "./AppointmentDetailModal";
 
-function CalendarView({ appointments, startDate, endDate, onRefresh, loading }) {
+function idString(ref) {
+  if (ref == null) return "";
+  if (typeof ref === "string") return ref;
+  return ref._id != null ? String(ref._id) : String(ref);
+}
+
+function CalendarView({
+  appointments,
+  startDate,
+  endDate,
+  onRefresh,
+  loading,
+  entityFilter = { mode: "all" },
+}) {
   const confirmDialog = useConfirmDialog();
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -25,7 +38,7 @@ function CalendarView({ appointments, startDate, endDate, onRefresh, loading }) 
     const fetchAllCareGivers = async () => {
       try {
         setLoadingCareGivers(true);
-        const response = await api.get("/caregivers?limit=100&isActive=true");
+        const response = await api.get("/caregivers?limit=200&isActive=true");
 
         if (response.data.success) {
           const careGivers = response.data.data.careGivers.map((cg) => ({
@@ -146,7 +159,43 @@ function CalendarView({ appointments, startDate, endDate, onRefresh, loading }) 
     }
   };
 
-  const careGivers = allCareGivers;
+  const careGivers = useMemo(() => {
+    if (entityFilter.mode === "all") {
+      return allCareGivers;
+    }
+    if (entityFilter.mode === "care_giver" && entityFilter.careGiverId) {
+      const id = entityFilter.careGiverId;
+      const match = allCareGivers.filter((cg) => cg.id === id);
+      return match;
+    }
+    if (entityFilter.mode === "care_receiver" && entityFilter.careReceiverId) {
+      const ids = new Set();
+      appointments.forEach((apt) => {
+        if (apt.careGiver) ids.add(idString(apt.careGiver));
+        if (apt.secondaryCareGiver) ids.add(idString(apt.secondaryCareGiver));
+      });
+      const filtered = allCareGivers.filter((cg) => ids.has(cg.id));
+      filtered.sort((a, b) => a.name.localeCompare(b.name));
+      return filtered;
+    }
+    return allCareGivers;
+  }, [allCareGivers, appointments, entityFilter]);
+
+  const emptyReceiverFilter =
+    entityFilter.mode === "care_receiver" &&
+    entityFilter.careReceiverId &&
+    !loading &&
+    !loadingCareGivers &&
+    allCareGivers.length > 0 &&
+    careGivers.length === 0;
+
+  const emptyCareGiverRow =
+    entityFilter.mode === "care_giver" &&
+    entityFilter.careGiverId &&
+    !loading &&
+    !loadingCareGivers &&
+    allCareGivers.length > 0 &&
+    careGivers.length === 0;
 
   return (
     <div className="space-y-4">
@@ -159,7 +208,7 @@ function CalendarView({ appointments, startDate, endDate, onRefresh, loading }) 
               Loading {loadingCareGivers ? "care givers" : "appointments"}...
             </span>
           </div>
-        ) : careGivers.length === 0 ? (
+        ) : allCareGivers.length === 0 ? (
           <div className="text-center py-16">
             <CalendarIcon className="h-14 w-14 mx-auto mb-4 text-gray-300" />
             <h3 className="text-lg font-semibold mb-1 text-gray-700">
@@ -167,6 +216,24 @@ function CalendarView({ appointments, startDate, endDate, onRefresh, loading }) 
             </h3>
             <p className="text-gray-400 text-sm">
               Please add care givers to the system first.
+            </p>
+          </div>
+        ) : emptyCareGiverRow ? (
+          <div className="text-center py-16 px-4">
+            <Users className="h-14 w-14 mx-auto mb-4 text-gray-300" />
+            <h3 className="text-lg font-semibold mb-1 text-gray-700">Care giver not in list</h3>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
+              The selected care giver was not found in the loaded list (up to 200 active). Adjust
+              filters or widen the care giver query if needed.
+            </p>
+          </div>
+        ) : emptyReceiverFilter ? (
+          <div className="text-center py-16 px-4">
+            <CalendarIcon className="h-14 w-14 mx-auto mb-4 text-gray-300" />
+            <h3 className="text-lg font-semibold mb-1 text-gray-700">No appointments in this range</h3>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
+              There are no appointments for this care receiver between the selected dates. Try a
+              different date range or clear the filter.
             </p>
           </div>
         ) : (

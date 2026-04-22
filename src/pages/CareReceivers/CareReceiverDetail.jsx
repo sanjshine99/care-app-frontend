@@ -5,11 +5,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
-  User,
   Phone,
   Mail,
   MapPin,
-  Calendar,
   Users,
   Clock,
   Edit,
@@ -17,10 +15,24 @@ import {
   ArrowLeft,
   AlertCircle,
   CheckCircle,
+  Ban,
+  Plus,
+  Pencil,
 } from "lucide-react";
 import { careReceiverService } from "../../services/careReceiverService";
 import api from "../../services/api";
 import { useConfirmDialog } from "../../contexts/ConfirmDialogContext";
+
+const SNR_REASON_LABELS = {
+  hospitalised: "Hospitalised",
+  unwell: "Unwell",
+  other: "Other",
+};
+
+function isoToDateInput(iso) {
+  if (!iso) return "";
+  return String(iso).slice(0, 10);
+}
 
 function CareReceiverDetail() {
   const navigate = useNavigate();
@@ -32,9 +44,25 @@ function CareReceiverDetail() {
   const [suitableCareGivers, setSuitableCareGivers] = useState([]);
   const [loadingCareGivers, setLoadingCareGivers] = useState(false);
   const [selectedVisit, setSelectedVisit] = useState(null);
+  const [snrPeriods, setSnrPeriods] = useState([]);
+  const [snrLoading, setSnrLoading] = useState(false);
+  const [snrModalOpen, setSnrModalOpen] = useState(false);
+  const [snrEditingId, setSnrEditingId] = useState(null);
+  const [snrForm, setSnrForm] = useState({
+    startDate: "",
+    endDate: "",
+    reasonType: "hospitalised",
+    comment: "",
+  });
+  const [snrSaving, setSnrSaving] = useState(false);
 
   useEffect(() => {
     loadCareReceiver();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    loadSnrPeriods();
   }, [id]);
 
   const loadCareReceiver = async () => {
@@ -49,6 +77,110 @@ function CareReceiverDetail() {
       navigate("/carereceivers");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSnrPeriods = async () => {
+    try {
+      setSnrLoading(true);
+      const response = await careReceiverService.listServiceNotRequired(id);
+      if (response.success) {
+        setSnrPeriods(response.data.periods || []);
+      }
+    } catch {
+      toast.error("Failed to load service-not-required periods");
+    } finally {
+      setSnrLoading(false);
+    }
+  };
+
+  const openSnrModal = (period = null) => {
+    if (period) {
+      setSnrEditingId(period._id);
+      setSnrForm({
+        startDate: isoToDateInput(period.startDate),
+        endDate: isoToDateInput(period.endDate),
+        reasonType: period.reasonType,
+        comment: period.comment || "",
+      });
+    } else {
+      setSnrEditingId(null);
+      setSnrForm({
+        startDate: "",
+        endDate: "",
+        reasonType: "hospitalised",
+        comment: "",
+      });
+    }
+    setSnrModalOpen(true);
+  };
+
+  const closeSnrModal = () => {
+    setSnrModalOpen(false);
+    setSnrEditingId(null);
+  };
+
+  const submitSnrModal = async () => {
+    if (!snrForm.startDate || !snrForm.endDate) {
+      toast.error("Start and end dates are required");
+      return;
+    }
+    if (snrForm.reasonType === "other" && !snrForm.comment.trim()) {
+      toast.error("Comment is required when reason is Other");
+      return;
+    }
+    try {
+      setSnrSaving(true);
+      const body = {
+        startDate: snrForm.startDate,
+        endDate: snrForm.endDate,
+        reasonType: snrForm.reasonType,
+        comment: snrForm.comment.trim(),
+      };
+      let res;
+      if (snrEditingId) {
+        res = await careReceiverService.updateServiceNotRequired(id, snrEditingId, body);
+      } else {
+        res = await careReceiverService.createServiceNotRequired(id, body);
+      }
+      if (res.success) {
+        const n = res.data?.cancelledCount ?? 0;
+        toast.success(
+          n > 0
+            ? `Saved. ${n} appointment(s) cancelled for this range.`
+            : "Saved.",
+        );
+        closeSnrModal();
+        await loadSnrPeriods();
+      }
+    } catch (error) {
+      const msg =
+        error.response?.data?.error?.message || "Could not save period";
+      toast.error(msg);
+    } finally {
+      setSnrSaving(false);
+    }
+  };
+
+  const deleteSnrPeriod = async (period) => {
+    const ok = await confirmDialog.confirm({
+      title: "Remove service-not-required period?",
+      message:
+        "This does not restore cancelled appointments. You can regenerate the schedule later if needed.",
+      variant: "danger",
+      confirmLabel: "Remove",
+    });
+    if (!ok) return;
+    try {
+      const res = await careReceiverService.deleteServiceNotRequired(id, period._id);
+      if (res.success) {
+        toast.success("Period removed");
+        await loadSnrPeriods();
+      }
+    } catch (error) {
+      const msg =
+        error.response?.data?.error?.message || "Could not remove period";
+      toast.error(msg);
     }
   };
 
@@ -274,6 +406,74 @@ function CareReceiverDetail() {
             )}
           </div>
 
+          {/* Service not required */}
+          <div className="card">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Ban className="h-5 w-5 text-amber-600" aria-hidden />
+                Service not required
+              </h2>
+              <button
+                type="button"
+                onClick={() => openSnrModal(null)}
+                className="btn-secondary text-sm flex items-center gap-1"
+              >
+                <Plus className="h-4 w-4" />
+                Add period
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Mark dates when no visits are needed (e.g. hospital). Existing
+              scheduled visits in that range are cancelled automatically.
+            </p>
+            {snrLoading ? (
+              <p className="text-sm text-gray-500">Loading…</p>
+            ) : snrPeriods.length === 0 ? (
+              <p className="text-sm text-gray-500">No periods recorded.</p>
+            ) : (
+              <ul className="space-y-3">
+                {snrPeriods.map((p) => (
+                  <li
+                    key={p._id}
+                    className="border border-gray-200 rounded-lg p-3 flex flex-wrap justify-between gap-2 items-start"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {isoToDateInput(p.startDate)} → {isoToDateInput(p.endDate)}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {SNR_REASON_LABELS[p.reasonType] || p.reasonType}
+                        {p.comment ? (
+                          <span className="text-gray-500">
+                            {" "}
+                            — {p.comment.length > 80 ? `${p.comment.slice(0, 80)}…` : p.comment}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openSnrModal(p)}
+                        className="text-sm text-primary-600 hover:underline flex items-center gap-1"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteSnrPeriod(p)}
+                        className="text-sm text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {/* Notes */}
           {careReceiver.notes && (
             <div className="card">
@@ -376,6 +576,104 @@ function CareReceiverDetail() {
       </div>
 
       {/* Suitable Care Givers Modal */}
+      {snrModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg"
+            role="dialog"
+            aria-labelledby="snr-modal-title"
+          >
+            <h2 id="snr-modal-title" className="text-lg font-bold mb-4">
+              {snrEditingId ? "Edit period" : "Service not required"}
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="snr-start" className="block text-sm font-medium text-gray-700 mb-1">
+                  Start date
+                </label>
+                <input
+                  id="snr-start"
+                  type="date"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  value={snrForm.startDate}
+                  onChange={(e) =>
+                    setSnrForm((f) => ({ ...f, startDate: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label htmlFor="snr-end" className="block text-sm font-medium text-gray-700 mb-1">
+                  End date
+                </label>
+                <input
+                  id="snr-end"
+                  type="date"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  value={snrForm.endDate}
+                  onChange={(e) =>
+                    setSnrForm((f) => ({ ...f, endDate: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label htmlFor="snr-reason" className="block text-sm font-medium text-gray-700 mb-1">
+                  Reason
+                </label>
+                <select
+                  id="snr-reason"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  value={snrForm.reasonType}
+                  onChange={(e) =>
+                    setSnrForm((f) => ({ ...f, reasonType: e.target.value }))
+                  }
+                >
+                  <option value="hospitalised">Hospitalised</option>
+                  <option value="unwell">Unwell</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="snr-comment" className="block text-sm font-medium text-gray-700 mb-1">
+                  Comment {snrForm.reasonType === "other" ? "(required)" : "(optional)"}
+                </label>
+                <textarea
+                  id="snr-comment"
+                  rows={3}
+                  maxLength={280}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  value={snrForm.comment}
+                  onChange={(e) =>
+                    setSnrForm((f) => ({ ...f, comment: e.target.value }))
+                  }
+                  placeholder="Short note for staff records"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  {snrForm.comment.length}/280
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeSnrModal}
+                className="btn-secondary"
+                disabled={snrSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitSnrModal}
+                className="btn-primary"
+                disabled={snrSaving}
+              >
+                {snrSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSuitableCareGivers && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
